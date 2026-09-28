@@ -1,0 +1,96 @@
+TIME-SERIES DATASET CONSTRUCTION COMPLETE
+================================================================================
+STRICT pairs      : 6
+Bins per pair     : 100
+Total rows        : 600
+ICE inputs        : 17
+EV targets        : 13
+Validation        : PASS
+
+PHASE LABEL NORMALIZATION
+--------------------------------------------------------------------------------
+INCH -> INCHING
+ACC -> ACCELERATION
+DEC -> DECELERATION
+CRUISE -> CRUISING
+This is label normalization only; Part-1 phase segmentation is not repeated.
+
+MODELLING REPRESENTATION
+--------------------------------------------------------------------------------
+Common reference axis: distance-based route progression
+Route bins per pair: 100
+Telemetry interval allocation: distance-overlap based
+Zero-distance interval handling: assigned to current route position
+ICE-EV timestamp alignment: NOT USED
+Latitude/Longitude modelling features: NOT USED
+Part-1 cleaning: NOT repeated
+Part-1 feature engineering: NOT repeated
+Part-1 phase segmentation: NOT repeated
+Charging/refuelling: handled separately
+EV charging time: NOT a TS prediction target
+ICE refuelling time: NOT a TS prediction target
+ICE refuelling contribution: retained in actual ICE TAT
+EV charging contribution: retained for final TAT reconstruction
+Pair ID retained for group-aware validation
+Route progress retained as sequence coordinate
+Route progress is NOT an EV target
+Total EV TAT is reconstructed after TS prediction
+Total EV distance is reconstructed from phase distances
+
+X COLUMNS
+--------------------------------------------------------------------------------
+Route_Progress
+ICE_Time_Total_min
+ICE_Distance_Total_km
+ICE_Moving_Average_Speed_kmh
+ICE_Mean_Acceleration_ms2
+ICE_STOP_Time_min
+ICE_IDLE_Time_min
+ICE_INCHING_Time_min
+ICE_ACC_Time_min
+ICE_DEC_Time_min
+ICE_CRUISE_Time_min
+ICE_STOP_Distance_km
+ICE_IDLE_Distance_km
+ICE_INCHING_Distance_km
+ICE_ACC_Distance_km
+ICE_DEC_Distance_km
+ICE_CRUISE_Distance_km
+
+Y COLUMNS
+--------------------------------------------------------------------------------
+EV_Moving_Average_Speed_kmh
+EV_STOP_Time_min
+EV_IDLE_Time_min
+EV_INCHING_Time_min
+EV_ACC_Time_min
+EV_DEC_Time_min
+EV_CRUISE_Time_min
+EV_STOP_Distance_km
+EV_IDLE_Distance_km
+EV_INCHING_Distance_km
+EV_ACC_Distance_km
+EV_DEC_Distance_km
+EV_CRUISE_Distance_km
+
+PAIR SUMMARY
+--------------------------------------------------------------------------------
+PAIR_001 | ICE distance=148.125 km | EV distance=148.199 km | ICE TAT=274.350 min | EV TAT=240.444 min | ICE six-phase=218.433 min | EV six-phase=240.444 min | ICE empty=0/100 | EV empty=0/100
+PAIR_006 | ICE distance=143.706 km | EV distance=143.678 km | ICE TAT=241.616 min | EV TAT=241.374 min | ICE six-phase=217.732 min | EV six-phase=241.374 min | ICE empty=0/100 | EV empty=0/100
+PAIR_011 | ICE distance=141.666 km | EV distance=141.599 km | ICE TAT=221.150 min | EV TAT=205.643 min | ICE six-phase=192.883 min | EV six-phase=182.727 min | ICE empty=0/100 | EV empty=0/100
+PAIR_014 | ICE distance=126.768 km | EV distance=126.797 km | ICE TAT=189.824 min | EV TAT=184.873 min | ICE six-phase=166.107 min | EV six-phase=184.873 min | ICE empty=0/100 | EV empty=0/100
+PAIR_017 | ICE distance=145.994 km | EV distance=145.906 km | ICE TAT=266.863 min | EV TAT=195.402 min | ICE six-phase=207.047 min | EV six-phase=195.402 min | ICE empty=0/100 | EV empty=0/100
+PAIR_018 | ICE distance=123.980 km | EV distance=123.993 km | ICE TAT=194.958 min | EV TAT=187.653 min | ICE six-phase=173.575 min | EV six-phase=187.653 min | ICE empty=0/100 | EV empty=0/100
+
+INTERPRETATION NOTES
+--------------------------------------------------------------------------------
+The constructed dataset is a distance-based route-progress representation.
+It is not raw telemetry-to-telemetry timestamp-aligned sequence data.
+Each pair contains exactly the same number of route bins.
+Telemetry intervals crossing multiple route bins are allocated using route-distance overlap.
+Zero-distance intervals are assigned to the route position where they occur.
+Existing Part-1 phase labels are normalized without re-segmenting telemetry.
+Charging/refuelling is excluded from the six-phase predictive target.
+Final EV TAT is reconstructed after TS prediction using separately calculated EV charging time.
+Conservation checks compare the route representation against the original Part-1 telemetry.
+100 bins remain a modelling design choice and should be evaluated during scientific validation.

@@ -1,0 +1,71 @@
+TIME-SERIES MODEL COMPARISON REPORT
+======================================================================
+
+MODELS COMPARED
+----------------------------------------------------------------------
+- Training Mean
+- Route-Bin Mean
+- Linear Regression
+- LSTM
+- GRU
+
+VALIDATION
+----------------------------------------------------------------------
+Validation method : Leave-One-Pair-Out
+Independent pairs : 6
+Random row split  : No
+Cross-pair mixing : No
+Primary metrics   : MAE, RMSE, R2
+MAPE              : Reference only
+
+OVERALL RESULTS
+----------------------------------------------------------------------
+            Model      MAE     RMSE       R2  MAPE_percent
+    Training Mean 1.268598 5.022295 0.887468  1.077987e+02
+   Route-Bin Mean 1.165924 4.706618 0.901170  1.015488e+02
+Linear Regression 0.791642 3.330560 0.950511  8.841342e+01
+             LSTM 0.889196 3.451762 0.946844  1.001882e+02
+              GRU 0.845835 3.265642 0.575902  4.736096e+06
+
+MODEL STABILITY
+----------------------------------------------------------------------
+            Model  Folds  Mean_MAE  Std_MAE  Mean_RMSE  Std_RMSE  Mean_R2   Std_R2  Minimum_R2  Maximum_R2  R2_Range
+    Training Mean      6  1.268598 0.085677   5.013403  0.327243 0.887430 0.013597    0.870905    0.902507  0.031602
+   Route-Bin Mean      6  1.165924 0.155074   4.656725  0.748733 0.901347 0.029486    0.860065    0.937360  0.077295
+Linear Regression      6  0.791642 0.101237   3.273916  0.670018 0.950282 0.022249    0.908307    0.968826  0.060519
+             LSTM      6  0.889196 0.092104   3.437361  0.345040 0.946860 0.010254    0.929609    0.960135  0.030526
+              GRU      6  0.845835 0.055368   3.261795  0.173594 0.568360 0.062401    0.470221    0.642830  0.172609
+
+TARGET SUMMARY
+----------------------------------------------------------------------
+            Model  Targets_Evaluated  Mean_Target_MAE  Mean_Target_RMSE  Mean_Target_R2  Median_Target_R2  Targets_R2_Positive  Targets_R2_Negative
+    Training Mean                 78         1.268598          1.683458        0.049966         -0.008644                    6                   66
+   Route-Bin Mean                 78         1.165924          1.606057       -0.210999         -0.114080                   20                   52
+Linear Regression                 78         0.791642          1.191697        0.120125          0.124849                   49                   23
+             LSTM                 13         0.889196          1.251976        0.108855          0.085262                    8                    4
+              GRU                 13         0.845835          1.195116        0.125504          0.154871                    7                    5
+
+TAT-RELEVANT TARGET SUMMARY
+----------------------------------------------------------------------
+            Model  TAT_Phase_Targets  Mean_MAE  Mean_RMSE   Mean_R2  Minimum_R2  Maximum_R2
+    Training Mean                 36  0.242330   0.526611 -0.029448   -0.131961    0.000000
+   Route-Bin Mean                 36  0.239759   0.567561 -0.485547   -9.101010    0.325665
+Linear Regression                 36  0.235468   0.529634 -0.061332   -1.756605    0.521462
+             LSTM                  6  0.262156   0.542027  0.075373   -0.109891    0.346992
+              GRU                  6  0.253039   0.534916  0.096840   -0.169673    0.412994
+
+PREDICTION AUDIT
+----------------------------------------------------------------------
+Model  Prediction_Rows  Unique_Targets  Unique_Pairs  Unique_Folds  Expected_Targets  Expected_Pairs  Expected_Rows
+ LSTM             7800              13             6             6                13               6           7800
+  GRU             7800              13             6             6                13               6           7800
+
+INTERPRETATION NOTES
+----------------------------------------------------------------------
+1. MAE and RMSE are the primary prediction-error metrics.
+2. R2 should be interpreted together with MAE and RMSE.
+3. MAPE is unstable for zero / near-zero phase quantities.
+4. Fold-to-fold variation is important because only six independent paired trips are available.
+5. No combined composite model score is created.
+6. LSTM and GRU target-wise metrics are calculated from their saved out-of-sample predictions for consistency.
+7. This script only compares completed experiments; no model is retrained.

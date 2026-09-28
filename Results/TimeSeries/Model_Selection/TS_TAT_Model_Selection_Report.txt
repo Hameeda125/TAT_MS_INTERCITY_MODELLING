@@ -1,0 +1,72 @@
+TS TAT-RELEVANT MODEL SELECTION REPORT
+================================================================================
+
+Purpose:
+Compare Linear Regression, LSTM and GRU for the six EV phase-time quantities that contribute to EV driving TAT.
+
+Dataset:
+D:\TAT_MS_INTERCITY_MODELLING\Results\TimeSeries\Dataset\TS_Sequence_Dataset.npz
+Pairs: 6
+Route bins per pair: 100
+
+Validation:
+Leave-One-Pair-Out
+Complete paired trip held out in each fold.
+No random row split.
+No cross-pair sequence leakage.
+
+LINEAR REGRESSION:
+OOS predictions were reconstructed from the authoritative TS sequence dataset.
+The 36 fold-level workbook rows were NOT treated as pooled target-wise results.
+
+TAT phase targets:
+  - EV_STOP_Time_min
+  - EV_IDLE_Time_min
+  - EV_INCHING_Time_min
+  - EV_ACC_Time_min
+  - EV_DEC_Time_min
+  - EV_CRUISE_Time_min
+
+POOLED TAT PHASE RESULTS
+--------------------------------------------------------------------------------
+            Model              Target   N      MAE     RMSE        R2  MAPE_percent
+Linear Regression    EV_STOP_Time_min 600 0.493850 1.752975 -0.124085     87.921597
+Linear Regression    EV_IDLE_Time_min 600 0.008213 0.051846 -0.029578     97.631099
+Linear Regression EV_INCHING_Time_min 600 0.083117 0.298190 -0.080194     97.579838
+Linear Regression     EV_ACC_Time_min 600 0.214758 0.295756  0.046454    188.968220
+Linear Regression     EV_DEC_Time_min 600 0.156870 0.217688  0.139164     63.963884
+Linear Regression  EV_CRUISE_Time_min 600 0.456001 0.780703  0.173251     67.031237
+             LSTM    EV_STOP_Time_min 600 0.642704 1.722177 -0.084933     78.104009
+             LSTM    EV_IDLE_Time_min 600 0.012715 0.053830 -0.109891    100.265980
+             LSTM EV_INCHING_Time_min 600 0.105158 0.296322 -0.066706     89.273336
+             LSTM     EV_ACC_Time_min 600 0.216306 0.274938  0.175970    231.021951
+             LSTM     EV_DEC_Time_min 600 0.162768 0.211058  0.190807     75.210599
+             LSTM  EV_CRUISE_Time_min 600 0.433284 0.693838  0.346992     68.483649
+              GRU    EV_STOP_Time_min 600 0.615564 1.723463 -0.086554     77.844969
+              GRU    EV_IDLE_Time_min 600 0.012586 0.053286 -0.087568     91.106798
+              GRU EV_INCHING_Time_min 600 0.114925 0.310295 -0.169673     96.351023
+              GRU     EV_ACC_Time_min 600 0.205219 0.265830  0.229658    192.816840
+              GRU     EV_DEC_Time_min 600 0.152766 0.198784  0.282184     70.024377
+              GRU  EV_CRUISE_Time_min 600 0.417170 0.657840  0.412994     63.780512
+
+SIX-PHASE TAT AGGREGATE OOS RESULTS
+--------------------------------------------------------------------------------
+            Model  N_Pairs   MAE_min  RMSE_min        R2
+Linear Regression        6 21.715995 26.993108 -0.128920
+             LSTM        6  9.587098 14.420885  0.677788
+              GRU        6 18.231857 23.056600  0.176340
+
+INTERPRETATION NOTES
+--------------------------------------------------------------------------------
+MAE, RMSE and R2 are reported phase-by-phase.
+MAPE is not used as a primary metric because phase-time targets contain zero / near-zero values.
+The six-phase aggregate represents driving-phase TAT only; EV charging time is excluded.
+EV charging time remains a separate calculation in the final EV TAT reconstruction workflow.
+Only six independent paired trips are available, so model differences remain preliminary.
+This stage performs model comparison only; no hyperparameter tuning is performed.
+
+OUTPUT FILES
+--------------------------------------------------------------------------------
+Model-selection workbook: D:\TAT_MS_INTERCITY_MODELLING\Results\TimeSeries\Model_Selection\TS_TAT_Model_Selection.xlsx
+Linear Regression OOS predictions: D:\TAT_MS_INTERCITY_MODELLING\Results\TimeSeries\Model_Selection\TS_LinearRegression_TAT_OOS_Predictions.xlsx
+Report: D:\TAT_MS_INTERCITY_MODELLING\Results\TimeSeries\Model_Selection\TS_TAT_Model_Selection_Report.txt

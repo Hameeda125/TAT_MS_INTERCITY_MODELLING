@@ -1,0 +1,33 @@
+TS GRU MODEL REPORT
+======================================================================
+
+MODEL CONFIGURATION
+----------------------------------------------------------------------
+Input features       : 17
+Output targets       : 13
+Sequence length      : 100
+Number of pairs      : 6
+Hidden size          : 16
+GRU layers           : 1
+Learning rate        : 0.001
+Weight decay         : 0.0001
+Epochs               : 500
+Gradient clipping    : 1.0
+Random seed          : 42
+Validation           : Leave-One-Pair-Out
+Scaling              : Fold-specific StandardScaler
+Random row split     : No
+Sliding windows      : No
+Cross-pair sequence  : No
+
+POOLED OUT-OF-SAMPLE RESULTS
+----------------------------------------------------------------------
+MAE                  : 0.845835
+RMSE                 : 3.265642
+R2                   : 0.575902
+MAPE (%)             : 4736096.000000
+
+NOTE
+----------------------------------------------------------------------
+MAPE is sensitive to zero and near-zero phase quantities and should not be treated as the primary metric.
+Only six independent paired trips are available; therefore the results are preliminary and should be interpreted with caution.

@@ -1,0 +1,37 @@
+TS SEQUENCE BUILD REPORT
+======================================================================
+
+SEQUENCE REPRESENTATION
+----------------------------------------------------------------------
+Number of independent trips: 6
+Route bins per trip: 100
+ICE input features: 17
+EV target features: 13
+
+X shape: (6, 100, 17)
+Y shape: (6, 100, 13)
+
+PAIR IDs
+----------------------------------------------------------------------
+0: PAIR_001
+1: PAIR_006
+2: PAIR_011
+3: PAIR_014
+4: PAIR_017
+5: PAIR_018
+
+SEQUENCE DESIGN DECISION
+----------------------------------------------------------------------
+One complete paired trip is treated as one independent sequence.
+
+No overlapping sliding windows are created at this stage.
+
+Pair_ID boundaries are strictly preserved.
+
+No scaling is performed in the sequence builder.
+
+No train/test split is performed in the sequence builder.
+
+No model is trained in the sequence builder.
+
+This prevents the 600 route bins from being incorrectly interpreted as 600 independent trips.

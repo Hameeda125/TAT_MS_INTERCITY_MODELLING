@@ -1,0 +1,44 @@
+TS DATASET SCIENTIFIC VALIDATION REPORT
+======================================================================
+
+Dataset:
+D:\TAT_MS_INTERCITY_MODELLING\Results\TimeSeries\Dataset\TS_Route_Progress_Dataset.xlsx
+
+Rows: 600
+Columns: 37
+Unique pairs: 6
+Bins per pair: 100
+
+FINAL STATUS: PASS
+
+METHODOLOGICAL ACCOUNTING
+----------------------------------------------------------------------
+The six predictive phases are:
+STOP, IDLE, INCHING, ACC, DEC, CRUISE
+
+Charging and refuelling are handled separately and are not predictive targets in the six-phase TS branch.
+
+Therefore:
+
+ICE TAT = six predictive phase time + excluded operational time
+
+EV TAT = six predictive phase time + excluded operational time
+
+Six-phase time is therefore not required to equal total TAT.
+
+ROUTE-PROGRESS REPRESENTATION
+----------------------------------------------------------------------
+Telemetry intervals are allocated to route bins using interval-overlap allocation.
+
+A telemetry interval may therefore contribute to more than one route bin.
+
+This prevents sparse telemetry intervals from creating artificial empty route bins.
+
+ACCELERATION VALIDATION
+----------------------------------------------------------------------
+Negative acceleration is physically valid and represents deceleration.
+Therefore negative acceleration values are not treated as dataset errors.
+
+EMPTY PREDICTIVE PHASE BINS
+----------------------------------------------------------------------
+Empty predictive-phase bins are informational only and are not automatically treated as missing telemetry.

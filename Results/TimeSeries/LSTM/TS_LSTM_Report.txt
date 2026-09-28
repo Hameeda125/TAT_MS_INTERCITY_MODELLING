@@ -1,0 +1,40 @@
+TS LSTM MODEL REPORT
+======================================================================
+
+DATASET
+Independent paired trips : 6
+Sequence length : 100
+ICE input features : 17
+EV target features : 13
+
+VALIDATION
+Leave-One-Pair-Out (LOPO)
+Each complete paired trip was held out as the test set.
+No random row-level splitting.
+No sliding windows.
+No cross-pair sequences.
+
+SCALING
+X and Y were scaled independently within every training fold.
+Test data used only the scalers fitted on the corresponding training fold.
+
+MODEL
+Hidden size : 16
+Layers : 1
+Epochs : 500
+Learning rate : 0.001
+Weight decay : 0.0001
+Device : cpu
+
+POOLED OUT-OF-SAMPLE RESULTS
+----------------------------------------------------------------------
+MAE  : 0.889196
+RMSE : 3.451762
+R2   : 0.946844
+MAPE : 100.188156%
+
+IMPORTANT INTERPRETATION
+The six paired trips are the independent experimental units.
+The 100 route-progress bins within each trip are ordered observations.
+They must not be interpreted as 600 independent samples.
+LSTM performance should therefore be interpreted as exploratory evidence given the very small number of independent paired trips.

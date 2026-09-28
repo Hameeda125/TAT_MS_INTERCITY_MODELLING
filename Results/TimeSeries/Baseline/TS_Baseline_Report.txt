@@ -1,0 +1,49 @@
+TS BASELINE MODEL REPORT
+======================================================================
+
+DATASET STRUCTURE
+Number of paired trips : 6
+Sequence length        : 100
+ICE input features     : 17
+EV target features     : 13
+
+VALIDATION STRATEGY
+Leave-One-Pair-Out (LOPO)
+Each complete paired trip is held out as the test set.
+No random row-level splitting was performed.
+No sliding windows were created.
+No information from the held-out pair was used for training.
+
+MODELS EVALUATED
+1. Training Mean
+2. Route-Bin Mean
+3. Point-wise Multi-output Linear Regression
+
+OVERALL POOLED OUT-OF-SAMPLE RESULTS
+----------------------------------------------------------------------
+
+Training Mean
+  MAE  : 1.268598
+  RMSE : 5.022295
+  R2   : 0.887468
+  MAPE : 107.798677%
+
+Route-Bin Mean
+  MAE  : 1.165924
+  RMSE : 4.706618
+  R2   : 0.901170
+  MAPE : 101.548815%
+
+Linear Regression
+  MAE  : 0.791642
+  RMSE : 3.330560
+  R2   : 0.950511
+  MAPE : 88.413418%
+
+
+IMPORTANT INTERPRETATION
+The six paired trips are the independent experimental units.
+The 100 route bins within each trip are ordered observations,
+not 100 independent trips.
+Performance is therefore evaluated using complete-trip LOPO validation.
+The Linear Regression scaler is fitted independently within each training fold.

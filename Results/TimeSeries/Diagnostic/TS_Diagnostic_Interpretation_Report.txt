@@ -1,0 +1,84 @@
+TIME-SERIES DIAGNOSTIC / INTERPRETATION REPORT
+======================================================================
+
+PURPOSE
+Diagnose completed TS experiments before EV TAT reconstruction.
+
+VALIDATION
+Leave-One-Pair-Out validation with six independent paired trips.
+No random row split.
+No cross-pair leakage.
+
+GRU RECOMPUTED METRICS
+----------------------------------------------------------------------
+MAE: 0.8458352148847154
+RMSE: 3.2656417008847085
+R2: 0.575902055682409
+MAPE_percent: 4736096.063329544
+
+GRU FOLD DIAGNOSTICS
+----------------------------------------------------------------------
+ Fold Test_Pair  Rows      MAE     RMSE       R2  MAPE_percent
+    1  PAIR_001  1300 0.879436 3.276317 0.950240  4.787576e+06
+    2  PAIR_006  1300 0.806889 3.151031 0.954426  4.816700e+06
+    3  PAIR_011  1300 0.829978 3.279757 0.955481  4.917315e+06
+    4  PAIR_014  1300 0.841851 3.330194 0.947584  4.542133e+06
+    5  PAIR_017  1300 0.780655 3.008717 0.958327  4.545983e+06
+    6  PAIR_018  1300 0.936203 3.524751 0.948405  4.806870e+06
+
+TARGET VARIABILITY
+----------------------------------------------------------------------
+                     Target        Phase   N      Mean       Std      Min       Max  Coefficient_of_Variation     Variability_Flag
+EV_Moving_Average_Speed_kmh        OTHER 600 53.214853 17.987525 3.442145 79.807480                  0.338017 ADEQUATE_VARIABILITY
+           EV_STOP_Time_min         STOP 600  0.225976  1.654773 0.000000 19.549999                  7.322787 ADEQUATE_VARIABILITY
+           EV_IDLE_Time_min         IDLE 600  0.002222  0.051139 0.000000  1.250000                 23.012390 ADEQUATE_VARIABILITY
+        EV_INCHING_Time_min      INCHING 600  0.035278  0.287147 0.000000  3.833333                  8.139602 ADEQUATE_VARIABILITY
+            EV_ACC_Time_min ACCELERATION 600  0.489910  0.303127 0.000000  1.672303                  0.618740 ADEQUATE_VARIABILITY
+            EV_DEC_Time_min DECELERATION 600  0.347980  0.234821 0.000000  1.263264                  0.674811 ADEQUATE_VARIABILITY
+         EV_CRUISE_Time_min       CRUISE 600  0.952753  0.859332 0.000000  7.777600                  0.901947 ADEQUATE_VARIABILITY
+        EV_STOP_Distance_km         STOP 600  0.003676  0.022553 0.000000  0.228842                  6.134804 ADEQUATE_VARIABILITY
+        EV_IDLE_Distance_km         IDLE 600  0.000000  0.000000 0.000000  0.000000                       NaN NEAR_CONSTANT_TARGET
+     EV_INCHING_Distance_km      INCHING 600  0.003211  0.020851 0.000000  0.220304                  6.493643 ADEQUATE_VARIABILITY
+         EV_ACC_Distance_km ACCELERATION 600  0.397128  0.226753 0.000000  1.000391                  0.570983 ADEQUATE_VARIABILITY
+         EV_DEC_Distance_km DECELERATION 600  0.276038  0.162066 0.000000  0.691913                  0.587114 ADEQUATE_VARIABILITY
+      EV_CRUISE_Distance_km       CRUISE 600  0.703369  0.321644 0.000000  1.481988                  0.457290 ADEQUATE_VARIABILITY
+
+TAT DIAGNOSTICS
+----------------------------------------------------------------------
+Model              Target        Phase   N  Actual_Mean  Actual_Std  Actual_Min  Actual_Max  Actual_Range      MAE     RMSE        R2  MAPE_percent  MAE_to_Std
+ LSTM    EV_STOP_Time_min         STOP 600     0.225976    1.654773         0.0   19.549999     19.549999 0.642704 1.722177 -0.084933  4.457579e+07    0.388394
+ LSTM    EV_IDLE_Time_min         IDLE 600     0.002222    0.051139         0.0    1.250000      1.250000 0.012715 0.053830 -0.109891  1.049195e+06    0.248630
+ LSTM EV_INCHING_Time_min      INCHING 600     0.035278    0.287147         0.0    3.833333      3.833333 0.105158 0.296322 -0.066706  7.362493e+06    0.366215
+ LSTM     EV_ACC_Time_min ACCELERATION 600     0.489910    0.303127         0.0    1.672303      1.672303 0.216306 0.274938  0.175970  1.920378e+06    0.713582
+ LSTM     EV_DEC_Time_min DECELERATION 600     0.347980    0.234821         0.0    1.263264      1.263264 0.162768 0.211058  0.190807  1.773579e+06    0.693157
+ LSTM  EV_CRUISE_Time_min       CRUISE 600     0.952753    0.859332         0.0    7.777600      7.777600 0.433284 0.693838  0.346992  8.912971e+04    0.504210
+  GRU    EV_STOP_Time_min         STOP 600     0.225976    1.654773         0.0   19.549999     19.549999 0.615564 1.723463 -0.086554  4.165087e+07    0.371993
+  GRU    EV_IDLE_Time_min         IDLE 600     0.002222    0.051139         0.0    1.250000      1.250000 0.012586 0.053286 -0.087568  1.039000e+06    0.246124
+  GRU EV_INCHING_Time_min      INCHING 600     0.035278    0.287147         0.0    3.833333      3.833333 0.114925 0.310295 -0.169673  8.142226e+06    0.400231
+  GRU     EV_ACC_Time_min ACCELERATION 600     0.489910    0.303127         0.0    1.672303      1.672303 0.205219 0.265830  0.229658  1.844069e+06    0.677006
+  GRU     EV_DEC_Time_min DECELERATION 600     0.347980    0.234821         0.0    1.263264      1.263264 0.152766 0.198784  0.282184  1.412410e+06    0.650565
+  GRU  EV_CRUISE_Time_min       CRUISE 600     0.952753    0.859332         0.0    7.777600      7.777600 0.417170 0.657840  0.412994  1.282544e+05    0.485459
+
+INTERPRETATION FLAGS
+----------------------------------------------------------------------
+                                  Topic                                                                                                             Observation                                                                     Evidence
+                         Linear vs LSTM                                         LSTM does not improve all primary pooled metrics relative to Linear Regression. Linear MAE=0.791642, LSTM MAE=0.889196; Linear R2=0.950511, LSTM R2=0.946844
+                                    GRU GRU requires careful interpretation because its pooled R2 is substantially lower than its MAE/RMSE alone would suggest.                                            GRU MAE=0.845835, GRU R2=0.575902
+Target variability: EV_IDLE_Distance_km                                           Target has limited variability; R2 may be unstable or difficult to interpret.                            Std=0.00000000, CV=nan, Flag=NEAR_CONSTANT_TARGET
+            TAT-phase performance: LSTM                                         Review individual TAT phase targets rather than relying only on pooled metrics.                                   3 of 6 TAT-phase targets have negative R2.
+             TAT-phase performance: GRU                                         Review individual TAT phase targets rather than relying only on pooled metrics.                                   3 of 6 TAT-phase targets have negative R2.
+
+SCIENTIFIC CHECKLIST
+----------------------------------------------------------------------
+                            Check                 Status                                                                              Reason
+Independent trip-level validation                   PASS                                         LOPO validation uses complete paired trips.
+         Random row split avoided                   PASS                                                           No random row split used.
+       Cross-pair leakage avoided                   PASS                                              Test pair remains completely held out.
+         LSTM prediction coverage                   PASS                                                      Expected 7800 prediction rows.
+          GRU prediction coverage                   PASS                                                      Expected 7800 prediction rows.
+                 MAPE suitability            NOT PRIMARY                      Zero / near-zero phase targets make percentage error unstable.
+                  Model selection PENDING INTERPRETATION Use MAE, RMSE, R2, target-wise behavior, fold stability and TAT relevance together.
+            EV TAT reconstruction             NEXT STAGE                             Perform only after the TS model behavior is documented.
+
+IMPORTANT NOTE
+The diagnostic does not select a model using a single composite score. Model usefulness must be interpreted in the context of EV parameter estimation and the TAT reconstruction objective.

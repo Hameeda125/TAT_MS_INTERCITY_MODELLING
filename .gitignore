@@ -14,11 +14,7 @@ __pycache__/
 .env
 .env.*
 
-# Local datasets and generated results
-data/
-datasets/
-outputs/
-results/
+
 
 # System files
 .DS_Store
