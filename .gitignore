@@ -1,0 +1,25 @@
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Secrets
+.env
+.env.*
+
+# Local datasets and generated results
+data/
+datasets/
+outputs/
+results/
+
+# System files
+.DS_Store
+Thumbs.db
