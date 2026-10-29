@@ -1,58 +1,102 @@
 from __future__ import annotations
 
-from pathlib import Path
-import pickle
+import argparse
+import hashlib
+import json
+import math
+import os
+import platform
 import random
+import sys
+import time
+import traceback
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
+import joblib
 import numpy as np
 import pandas as pd
 import torch
 from torch import nn
-from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+from sklearn.metrics import (
+    mean_absolute_error,
+    mean_squared_error,
+    median_absolute_error,
+    r2_score,
+)
 from sklearn.preprocessing import StandardScaler
 
-from src.preprocessing.data_loader import load_excel
+
+# =============================================================================
+# VERSION / METHOD
+# =============================================================================
+
+SCRIPT_VERSION = "2026-10-01_FULL_DL_V9_FIXED_LOPO_CONVERGENCE_15X15"
+
+# Fixed a priori — no nested Optuna/HPO.
+DEFAULT_HIDDEN_LAYERS = (16, 8)
+DEFAULT_DROPOUT = 0.10
+DEFAULT_LEARNING_RATE = 1e-3
+DEFAULT_WEIGHT_DECAY = 1e-3
+DEFAULT_EPOCHS = 250
+DEFAULT_GRADIENT_CLIP = 1.0
+ENSEMBLE_SEEDS_DEFAULT = (42, 123, 2026, 31415, 27182)
 
 
-# ============================================================
-# FULL DL CONFIGURATION
-# ============================================================
-
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
-
-INPUT_FILE = Path(
-    r"D:\TAT_MS_INTERCITY\Data\Results\Master_Summary\Training_Data\EV_ICE_Training_STRICT.xlsx"
+HYPERPARAMETER_INTERPRETATION = (
+    "FIXED/PREDECLARED FOR THIS CODE VERSION; NOT HPO-OPTIMIZED"
 )
 
-RESULTS_DIR = PROJECT_ROOT / "Results" / "DL" / "Full_Model"
-MODEL_DIR = PROJECT_ROOT / "models" / "DL" / "Full_Model"
+HYPERPARAMETER_SELECTION_METHOD = (
+    "FIXED_PREDECLARED_ANALYSIS_SPECIFICATION_NOT_HPO_OPTIMIZED"
+)
 
-RANDOM_SEED = 42
+HYPERPARAMETER_RATIONALE = (
+    "Compact small-sample DNN specification fixed for this revised analysis; "
+    "not selected by LOPO outcomes and not optimized by Optuna/HPO."
+)
 
-EPOCHS = 1000
-LEARNING_RATE = 1e-3
-WEIGHT_DECAY = 1e-4
+PREDECLARED_MEANING = (
+    "Predeclared here means fixed in this code/version before this evaluation "
+    "run; it does not imply external preregistration."
+)
 
-HIDDEN_1 = 32
-HIDDEN_2 = 16
+CONVERGENCE_INTERPRETATION = (
+    "TRAINING-LOSS OPTIMIZATION DIAGNOSTIC ONLY; "
+    "NOT AN OUT-OF-SAMPLE GENERALIZATION CLAIM"
+)
 
 
-# ============================================================
-# 15 ICE INPUT FEATURES
-# ============================================================
+# =============================================================================
+# PATHS
+# =============================================================================
 
-ICE_FEATURES = [
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PART1_PROJECT = PROJECT_ROOT.parent / "TAT_MS_INTERCITY"
+TRAINING_DATA_DIR = (
+    PART1_PROJECT / "Data" / "Results" / "Master_Summary" / "Training_Data"
+)
+RESULTS_ROOT = PROJECT_ROOT / "Results"
+MODEL_ROOT = PROJECT_ROOT / "models"
+
+
+# =============================================================================
+# FROZEN DATA CONTRACT
+# =============================================================================
+
+ALL_ICE_CANDIDATES = [
     "ICE Total Distance (km)",
     "ICE Total TAT (min)",
     "ICE Average Moving Speed (km/h)",
-
+    "ICE CHARGING_REFUELING Time (min)",
     "ICE STOP Time (min)",
     "ICE IDLE Time (min)",
     "ICE INCHING Time (min)",
     "ICE ACC Time (min)",
     "ICE DEC Time (min)",
     "ICE CRUISE Time (min)",
-
+    "ICE CHARGING_REFUELING Distance (km)",
     "ICE STOP Distance (km)",
     "ICE IDLE Distance (km)",
     "ICE INCHING Distance (km)",
@@ -61,23 +105,26 @@ ICE_FEATURES = [
     "ICE CRUISE Distance (km)",
 ]
 
+EXCLUDED_CONSTANT_ICE_FEATURES = [
+    "ICE CHARGING_REFUELING Time (min)",
+    "ICE CHARGING_REFUELING Distance (km)",
+]
 
-# ============================================================
-# 15 EV TARGET FEATURES
-# ============================================================
+ICE_FEATURES = [
+    c for c in ALL_ICE_CANDIDATES
+    if c not in EXCLUDED_CONSTANT_ICE_FEATURES
+]
 
 EV_TARGETS = [
     "EV Total Distance (km)",
     "EV Total TAT (min)",
     "EV Average Moving Speed (km/h)",
-
     "EV STOP Time (min)",
     "EV IDLE Time (min)",
     "EV INCHING Time (min)",
     "EV ACC Time (min)",
     "EV DEC Time (min)",
     "EV CRUISE Time (min)",
-
     "EV STOP Distance (km)",
     "EV IDLE Distance (km)",
     "EV INCHING Distance (km)",
@@ -86,75 +133,823 @@ EV_TARGETS = [
     "EV CRUISE Distance (km)",
 ]
 
+PHASE_TIME_TARGETS = [
+    "EV STOP Time (min)",
+    "EV IDLE Time (min)",
+    "EV INCHING Time (min)",
+    "EV ACC Time (min)",
+    "EV DEC Time (min)",
+    "EV CRUISE Time (min)",
+]
 
-# ============================================================
-# REPRODUCIBILITY
-# ============================================================
+PAIR_COLUMN = "Pair ID"
+PAIR_CLASS_COLUMN = "Pair Class"
+VALID_PAIR_CLASSES = {"STRICT", "NONSTRICT"}
+VALID_SCOPES = {"STRICT", "NONSTRICT", "COMBINED", "ALL"}
 
-def set_seed(seed: int = RANDOM_SEED) -> None:
 
+# =============================================================================
+# REPRODUCIBILITY / DEVICE
+# =============================================================================
+
+def set_seed(seed: int) -> None:
+    os.environ.setdefault("CUBLAS_WORKSPACE_CONFIG", ":4096:8")
     random.seed(seed)
     np.random.seed(seed)
-
     torch.manual_seed(seed)
 
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
+    torch.use_deterministic_algorithms(True, warn_only=True)
 
-# ============================================================
-# DNN MODEL
-# ============================================================
+    if hasattr(torch.backends, "cudnn"):
+        torch.backends.cudnn.benchmark = False
+        torch.backends.cudnn.deterministic = True
 
-class FullDLRegressor(nn.Module):
+    try:
+        torch.set_num_threads(1)
+    except RuntimeError:
+        pass
 
-    def __init__(
-        self,
-        input_dim: int,
-        output_dim: int,
-    ) -> None:
 
-        super().__init__()
+def resolve_device(name: str) -> torch.device:
+    name = str(name).strip().lower()
 
-        self.network = nn.Sequential(
+    if name in {"auto", "cpu"}:
+        return torch.device("cpu")
 
-            nn.Linear(
-                input_dim,
-                HIDDEN_1,
-            ),
+    if name == "cuda":
+        if not torch.cuda.is_available():
+            raise RuntimeError("CUDA requested but unavailable.")
+        return torch.device("cuda")
 
-            nn.ReLU(),
+    raise ValueError("--device must be auto, cpu or cuda.")
 
-            nn.Linear(
-                HIDDEN_1,
-                HIDDEN_2,
-            ),
 
-            nn.ReLU(),
+def parse_seeds(text: str) -> tuple[int, ...]:
+    seeds = tuple(int(x.strip()) for x in str(text).split(",") if x.strip())
 
-            nn.Linear(
-                HIDDEN_2,
-                output_dim,
-            ),
+    if not seeds:
+        raise ValueError("At least one ensemble seed is required.")
+
+    if len(seeds) != len(set(seeds)):
+        raise ValueError("Ensemble seeds must be unique.")
+
+    return seeds
+
+
+def parse_architecture(text: str) -> tuple[int, ...]:
+    values = tuple(int(x.strip()) for x in str(text).split("-") if x.strip())
+
+    if not values or any(v <= 0 for v in values):
+        raise ValueError("Architecture must contain positive widths, e.g. 16-8.")
+
+    return values
+
+
+def arch_to_text(values: tuple[int, ...]) -> str:
+    return "-".join(str(v) for v in values)
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+
+    return digest.hexdigest()
+
+
+# =============================================================================
+# DATA LOADING / SCOPE VALIDATION
+# =============================================================================
+
+def normalize_scope(scope: str, allow_all: bool = False) -> str:
+    scope = str(scope).strip().upper()
+    allowed = VALID_SCOPES if allow_all else VALID_SCOPES - {"ALL"}
+
+    if scope not in allowed:
+        raise ValueError(
+            f"Invalid scope {scope!r}; allowed={sorted(allowed)}"
         )
 
-    def forward(
-        self,
-        x: torch.Tensor,
-    ) -> torch.Tensor:
+    return scope
 
+
+def training_file(pair_class: str) -> Path:
+    pair_class = str(pair_class).strip().upper()
+
+    if pair_class not in VALID_PAIR_CLASSES:
+        raise ValueError("Pair Class must be STRICT or NONSTRICT.")
+
+    path = TRAINING_DATA_DIR / f"EV_ICE_Training_{pair_class}.xlsx"
+
+    if not path.is_file():
+        raise FileNotFoundError(f"Training workbook not found:\n{path}")
+
+    return path
+
+
+def validate_numeric_nonnegative(
+    dataframe: pd.DataFrame,
+    columns: list[str],
+) -> None:
+    for column in columns:
+        converted = pd.to_numeric(dataframe[column], errors="coerce")
+
+        if converted.isna().any():
+            raise ValueError(
+                f"{column!r} contains missing/non-numeric values."
+            )
+
+        values = converted.to_numpy(dtype=float)
+
+        if not np.isfinite(values).all():
+            raise ValueError(f"{column!r} contains non-finite values.")
+
+        if (values < 0).any():
+            raise ValueError(f"{column!r} contains negative source values.")
+
+
+def load_source(
+    pair_class: str,
+) -> tuple[pd.DataFrame, Path, dict[str, Any]]:
+    pair_class = str(pair_class).strip().upper()
+    path = training_file(pair_class)
+
+    dataframe = pd.read_excel(
+        path,
+        sheet_name="01_Training_Data",
+        header=3,
+        engine="openpyxl",
+    )
+
+    if dataframe.empty:
+        raise ValueError(f"{pair_class} training data is empty.")
+
+    dataframe.columns = [str(c).strip() for c in dataframe.columns]
+
+    required = (
+        ALL_ICE_CANDIDATES
+        + EV_TARGETS
+        + [PAIR_COLUMN, PAIR_CLASS_COLUMN]
+    )
+
+    missing = [c for c in required if c not in dataframe.columns]
+
+    if missing:
+        raise ValueError(
+            "Missing required columns:\n"
+            + "\n".join(f" - {c}" for c in missing)
+        )
+
+    if len(ICE_FEATURES) != 15 or len(EV_TARGETS) != 15:
+        raise RuntimeError(
+            "Frozen Full-DL contract must be exactly 15 inputs -> 15 outputs."
+        )
+
+    pair_ids = dataframe[PAIR_COLUMN].astype("string").str.strip()
+
+    if pair_ids.isna().any() or pair_ids.eq("").any():
+        raise ValueError("Pair ID contains missing/blank values.")
+
+    if pair_ids.duplicated().any():
+        duplicates = pair_ids[pair_ids.duplicated(keep=False)].tolist()
+        raise ValueError(f"Duplicate Pair IDs found: {duplicates}")
+
+    pair_classes = (
+        dataframe[PAIR_CLASS_COLUMN]
+        .astype("string")
+        .str.strip()
+        .str.upper()
+    )
+
+    if pair_classes.isna().any() or pair_classes.eq("").any():
+        raise ValueError("Pair Class contains missing/blank values.")
+
+    observed = set(pair_classes.tolist())
+
+    if observed != {pair_class}:
+        raise ValueError(
+            f"Expected authoritative Pair Class {pair_class}, "
+            f"observed {sorted(observed)}."
+        )
+
+    validate_numeric_nonnegative(
+        dataframe,
+        ALL_ICE_CANDIDATES + EV_TARGETS,
+    )
+
+    constants: dict[str, Any] = {}
+
+    for column in EXCLUDED_CONSTANT_ICE_FEATURES:
+        values = pd.unique(dataframe[column])
+
+        constants[column] = {
+            "unique_count": int(len(values)),
+            "value": float(values[0]) if len(values) == 1 else None,
+        }
+
+        if len(values) != 1:
+            raise ValueError(
+                f"{column!r} is no longer constant in {pair_class}. "
+                "Frozen 15-input interface stopped safely."
+            )
+
+    report = {
+        "rows": int(len(dataframe)),
+        "unique_pairs": int(dataframe[PAIR_COLUMN].nunique()),
+        "strict_rows": int((pair_classes == "STRICT").sum()),
+        "nonstrict_rows": int((pair_classes == "NONSTRICT").sum()),
+        "excluded_constant_report": constants,
+        "pair_class_handling": "READ / VALIDATE / PRESERVE ONLY",
+        "pair_class_recalculation": "NONE",
+        "pair_class_overwrite": "NONE",
+        "pair_class_used_as_predictor": False,
+    }
+
+    return dataframe.reset_index(drop=True), path, report
+
+
+def load_scope(
+    scope: str,
+) -> tuple[pd.DataFrame, list[Path], dict[str, Any]]:
+    scope = normalize_scope(scope)
+
+    if scope in VALID_PAIR_CLASSES:
+        dataframe, path, report = load_source(scope)
+        report["scope"] = scope
+        return dataframe, [path], report
+
+    strict, strict_path, strict_report = load_source("STRICT")
+    nonstrict, nonstrict_path, nonstrict_report = load_source("NONSTRICT")
+
+    overlap = (
+        set(strict[PAIR_COLUMN].astype(str))
+        & set(nonstrict[PAIR_COLUMN].astype(str))
+    )
+
+    if overlap:
+        raise ValueError(
+            f"Pair IDs overlap across STRICT/NONSTRICT: {sorted(overlap)}"
+        )
+
+    if list(strict.columns) != list(nonstrict.columns):
+        raise ValueError(
+            "STRICT and NONSTRICT schemas differ; COMBINED stopped."
+        )
+
+    dataframe = pd.concat(
+        [strict, nonstrict],
+        ignore_index=True,
+        sort=False,
+    )
+
+    if dataframe[PAIR_COLUMN].astype(str).duplicated().any():
+        raise ValueError("Duplicate Pair IDs after COMBINED concatenation.")
+
+    classes = set(
+        dataframe[PAIR_CLASS_COLUMN]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+    )
+
+    if classes != {"STRICT", "NONSTRICT"}:
+        raise ValueError(
+            "COMBINED must preserve both authoritative Pair Classes."
+        )
+
+    report = {
+        "scope": "COMBINED",
+        "rows": int(len(dataframe)),
+        "unique_pairs": int(dataframe[PAIR_COLUMN].nunique()),
+        "strict_rows": int(strict_report["rows"]),
+        "nonstrict_rows": int(nonstrict_report["rows"]),
+        "overlapping_pair_ids": 0,
+        "pair_class_handling": "READ / VALIDATE / PRESERVE ONLY",
+        "pair_class_recalculation": "NONE",
+        "pair_class_overwrite": "NONE",
+        "pair_class_used_as_predictor": False,
+    }
+
+    return (
+        dataframe.reset_index(drop=True),
+        [strict_path, nonstrict_path],
+        report,
+    )
+
+
+def output_dirs(scope: str) -> tuple[Path, Path]:
+    scope = normalize_scope(scope)
+
+    return (
+        RESULTS_ROOT / scope / "DL" / "Full_Model",
+        MODEL_ROOT / scope / "DL" / "Full_Model",
+    )
+
+
+# =============================================================================
+# MODEL
+# =============================================================================
+
+@dataclass(frozen=True)
+class HParams:
+    hidden_layers: tuple[int, ...]
+    dropout: float
+    learning_rate: float
+    weight_decay: float
+
+
+class FullDNN(nn.Module):
+    def __init__(self, hp: HParams) -> None:
+        super().__init__()
+
+        layers: list[nn.Module] = []
+        previous = len(ICE_FEATURES)
+
+        for width in hp.hidden_layers:
+            layers.extend(
+                [
+                    nn.Linear(previous, width),
+                    nn.ReLU(),
+                ]
+            )
+
+            if hp.dropout > 0:
+                layers.append(nn.Dropout(hp.dropout))
+
+            previous = width
+
+        layers.append(nn.Linear(previous, len(EV_TARGETS)))
+        self.network = nn.Sequential(*layers)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return self.network(x)
 
 
-# ============================================================
-# SAFE MAPE
-# ============================================================
+def train_fixed(
+    X_scaled: np.ndarray,
+    y_scaled: np.ndarray,
+    hp: HParams,
+    epochs: int,
+    seed: int,
+    device: torch.device,
+    gradient_clip: float,
+) -> tuple[FullDNN, dict[str, Any]]:
+    """
+    Fit one fixed DNN and return optimization diagnostics.
+
+    Diagnostics describe training-loss behavior only. They are NOT used for
+    model selection and are NOT evidence of held-out/generalization quality.
+    """
+    set_seed(seed)
+
+    model = FullDNN(hp).to(device)
+
+    optimizer = torch.optim.AdamW(
+        model.parameters(),
+        lr=hp.learning_rate,
+        weight_decay=hp.weight_decay,
+    )
+
+    loss_function = nn.MSELoss()
+
+    X_tensor = torch.as_tensor(
+        X_scaled,
+        dtype=torch.float32,
+        device=device,
+    )
+
+    y_tensor = torch.as_tensor(
+        y_scaled,
+        dtype=torch.float32,
+        device=device,
+    )
+
+    # Deterministic initial loss with dropout disabled.
+    model.eval()
+    with torch.no_grad():
+        initial_loss = float(
+            loss_function(
+                model(X_tensor),
+                y_tensor,
+            ).detach().cpu().item()
+        )
+
+    epoch_losses: list[float] = []
+
+    model.train()
+
+    for _ in range(int(epochs)):
+        optimizer.zero_grad(set_to_none=True)
+
+        loss = loss_function(
+            model(X_tensor),
+            y_tensor,
+        )
+
+        if not torch.isfinite(loss):
+            raise RuntimeError("Non-finite Full-DL training loss.")
+
+        loss_value = float(
+            loss.detach().cpu().item()
+        )
+
+        epoch_losses.append(
+            loss_value
+        )
+
+        loss.backward()
+
+        torch.nn.utils.clip_grad_norm_(
+            model.parameters(),
+            gradient_clip,
+        )
+
+        optimizer.step()
+
+    model.eval()
+
+    with torch.no_grad():
+        final_eval_loss = float(
+            loss_function(
+                model(X_tensor),
+                y_tensor,
+            ).detach().cpu().item()
+        )
+
+    losses = np.asarray(
+        epoch_losses,
+        dtype=float,
+    )
+
+    if (
+        losses.size != int(epochs)
+        or not np.isfinite(losses).all()
+        or not np.isfinite(initial_loss)
+        or not np.isfinite(final_eval_loss)
+    ):
+        raise RuntimeError(
+            "Full-DL convergence diagnostics contain non-finite values."
+        )
+
+    window = max(
+        1,
+        min(
+            int(epochs) // 10,
+            25,
+        ),
+    )
+
+    first_window_mean = float(
+        np.mean(
+            losses[
+                :window
+            ]
+        )
+    )
+
+    last_window_mean = float(
+        np.mean(
+            losses[
+                -window:
+            ]
+        )
+    )
+
+    if len(losses) >= 2 * window:
+        previous_window_mean = float(
+            np.mean(
+                losses[
+                    -2 * window:
+                    -window
+                ]
+            )
+        )
+    else:
+        previous_window_mean = first_window_mean
+
+    scale = max(
+        abs(
+            previous_window_mean
+        ),
+        1e-12,
+    )
+
+    tail_relative_change = float(
+        (
+            last_window_mean
+            - previous_window_mean
+        )
+        / scale
+    )
+
+    relative_reduction = float(
+        (
+            initial_loss
+            - final_eval_loss
+        )
+        / max(
+            abs(
+                initial_loss
+            ),
+            1e-12,
+        )
+    )
+
+    if abs(
+        tail_relative_change
+    ) <= 0.02:
+        tail_status = (
+            "TAIL_STABLE_WITHIN_2_PERCENT"
+        )
+    elif tail_relative_change < 0:
+        tail_status = (
+            "TAIL_STILL_DECREASING"
+        )
+    else:
+        tail_status = (
+            "TAIL_INCREASED"
+        )
+
+    overall_status = (
+        "TRAINING_LOSS_DECREASED"
+        if final_eval_loss < initial_loss
+        else "CHECK_TRAINING_LOSS"
+    )
+
+    diagnostics = {
+        "Seed": int(seed),
+        "Epochs": int(epochs),
+        "Initial Eval Training MSE": initial_loss,
+        "First Epoch Training MSE": float(
+            losses[
+                0
+            ]
+        ),
+        "Minimum Epoch Training MSE": float(
+            np.min(
+                losses
+            )
+        ),
+        "Final Epoch Training MSE": float(
+            losses[
+                -1
+            ]
+        ),
+        "Final Eval Training MSE": final_eval_loss,
+        "First Window Mean Training MSE": first_window_mean,
+        "Previous Tail Window Mean Training MSE": previous_window_mean,
+        "Last Window Mean Training MSE": last_window_mean,
+        "Relative Initial-to-Final Loss Reduction": relative_reduction,
+        "Tail Relative Loss Change": tail_relative_change,
+        "Tail Diagnostic": tail_status,
+        "Overall Optimization Diagnostic": overall_status,
+        "Interpretation": CONVERGENCE_INTERPRETATION,
+    }
+
+    return model, diagnostics
+
+
+
+def predict_scaled(
+    model: FullDNN,
+    X_scaled: np.ndarray,
+    device: torch.device,
+) -> np.ndarray:
+    with torch.no_grad():
+        tensor = torch.as_tensor(
+            X_scaled,
+            dtype=torch.float32,
+            device=device,
+        )
+
+        return model(tensor).detach().cpu().numpy()
+
+
+# =============================================================================
+# LOPO OOS EVALUATION — NO NESTED HPO
+# =============================================================================
+
+def run_lopo(
+    dataframe: pd.DataFrame,
+    scope: str,
+    seeds: tuple[int, ...],
+    device: torch.device,
+    hp: HParams,
+    epochs: int,
+    gradient_clip: float,
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    pair_ids = dataframe[PAIR_COLUMN].astype(str).to_numpy()
+    unique_pairs = list(dict.fromkeys(pair_ids.tolist()))
+
+    if len(unique_pairs) < 3:
+        raise ValueError(
+            "At least 3 Pair IDs are required for Full-DL LOPO."
+        )
+
+    prediction_rows: list[dict[str, Any]] = []
+    fold_rows: list[dict[str, Any]] = []
+    convergence_rows: list[dict[str, Any]] = []
+
+    for fold_number, pair_id in enumerate(unique_pairs, start=1):
+        started = time.monotonic()
+
+        test_mask = pair_ids == pair_id
+        train_dataframe = dataframe.loc[~test_mask].reset_index(drop=True)
+        test_dataframe = dataframe.loc[test_mask].reset_index(drop=True)
+
+        if len(test_dataframe) != 1:
+            raise RuntimeError(
+                f"Pair {pair_id} must correspond to exactly one row."
+            )
+
+        pair_class = str(
+            test_dataframe.loc[0, PAIR_CLASS_COLUMN]
+        ).strip().upper()
+
+        X_train = train_dataframe[ICE_FEATURES].to_numpy(dtype=float)
+        y_train = train_dataframe[EV_TARGETS].to_numpy(dtype=float)
+        X_test = test_dataframe[ICE_FEATURES].to_numpy(dtype=float)
+        y_test = test_dataframe[EV_TARGETS].to_numpy(dtype=float)
+
+        x_scaler = StandardScaler()
+        y_scaler = StandardScaler()
+
+        X_train_scaled = x_scaler.fit_transform(X_train)
+        y_train_scaled = y_scaler.fit_transform(y_train)
+        X_test_scaled = x_scaler.transform(X_test)
+
+        seed_predictions_scaled = []
+
+        for seed in seeds:
+            model, convergence = train_fixed(
+                X_scaled=X_train_scaled,
+                y_scaled=y_train_scaled,
+                hp=hp,
+                epochs=epochs,
+                seed=seed,
+                device=device,
+                gradient_clip=gradient_clip,
+            )
+
+            convergence_rows.append(
+                {
+                    "Dataset Scope": scope,
+                    "Training Role": "OUTER_LOPO_TRAIN",
+                    "Outer Fold": fold_number,
+                    "Held-Out Pair ID": pair_id,
+                    "Held-Out Pair Class": pair_class,
+                    **convergence,
+                }
+            )
+
+            seed_predictions_scaled.append(
+                predict_scaled(
+                    model,
+                    X_test_scaled,
+                    device,
+                )
+            )
+
+        stacked_scaled = np.stack(seed_predictions_scaled, axis=0)
+        mean_scaled = stacked_scaled.mean(axis=0)
+
+        raw_prediction = y_scaler.inverse_transform(mean_scaled)
+        prediction = np.maximum(raw_prediction, 0.0)
+
+        seed_original = np.stack(
+            [
+                y_scaler.inverse_transform(item)
+                for item in seed_predictions_scaled
+            ],
+            axis=0,
+        )
+
+        ensemble_sd = seed_original.std(axis=0, ddof=0)
+
+        baseline_scaled = np.zeros_like(mean_scaled)
+        baseline_prediction = y_scaler.inverse_transform(baseline_scaled)
+
+        y_test_scaled = y_scaler.transform(y_test)
+
+        model_standardized_rmse = float(
+            np.sqrt(
+                np.mean(
+                    (y_test_scaled - mean_scaled) ** 2
+                )
+            )
+        )
+
+        baseline_standardized_rmse = float(
+            np.sqrt(
+                np.mean(
+                    y_test_scaled ** 2
+                )
+            )
+        )
+
+        fold_rows.append(
+            {
+                "Outer Fold": fold_number,
+                "Pair ID": pair_id,
+                "Pair Class": pair_class,
+                "Architecture": arch_to_text(hp.hidden_layers),
+                "Dropout": hp.dropout,
+                "Learning Rate": hp.learning_rate,
+                "Weight Decay": hp.weight_decay,
+                "Fixed Epochs": epochs,
+                "Ensemble Seeds": " | ".join(str(s) for s in seeds),
+                "Hyperparameter Interpretation": (
+                    HYPERPARAMETER_INTERPRETATION
+                ),
+                "Model Standardized RMSE": model_standardized_rmse,
+                "TrainingMean Baseline Standardized RMSE": (
+                    baseline_standardized_rmse
+                ),
+                "Baseline Relative Standardized RMSE": (
+                    model_standardized_rmse / baseline_standardized_rmse
+                    if baseline_standardized_rmse > 0
+                    else np.nan
+                ),
+                "Elapsed Seconds": time.monotonic() - started,
+            }
+        )
+
+        row: dict[str, Any] = {
+            "Outer Fold": fold_number,
+            "Pair ID": pair_id,
+            "Pair Class": pair_class,
+            "Model Scope": scope,
+            "Model Source": "FULL_DL",
+            "Architecture": arch_to_text(hp.hidden_layers),
+            "Fixed Epochs": epochs,
+            "Selection Method": HYPERPARAMETER_SELECTION_METHOD,
+            "Hyperparameter Interpretation": (
+                HYPERPARAMETER_INTERPRETATION
+            ),
+        }
+
+        for target_index, target in enumerate(EV_TARGETS):
+            raw_value = float(raw_prediction[0, target_index])
+            post_value = float(prediction[0, target_index])
+
+            row[f"Actual {target}"] = float(
+                y_test[0, target_index]
+            )
+
+            row[f"Raw Predicted {target}"] = raw_value
+            row[f"Predicted {target}"] = post_value
+
+            row[f"Ensemble SD {target}"] = float(
+                ensemble_sd[0, target_index]
+            )
+
+            row[f"TrainingMeanBaseline {target}"] = float(
+                baseline_prediction[0, target_index]
+            )
+
+            row[f"Raw Negative Flag {target}"] = bool(
+                raw_value < 0
+            )
+
+        row["Predicted Six-Phase Time Sum Before Charging (min)"] = float(
+            sum(
+                row[f"Predicted {target}"]
+                for target in PHASE_TIME_TARGETS
+            )
+        )
+
+        prediction_rows.append(row)
+
+        print(
+            f"Outer {fold_number}/{len(unique_pairs)}"
+            f" | {pair_id}"
+            f" | {pair_class}"
+            f" | {time.monotonic() - started:.2f}s"
+            f" | stdRMSE={model_standardized_rmse:.4f}",
+            flush=True,
+        )
+
+    return (
+        pd.DataFrame(prediction_rows),
+        pd.DataFrame(fold_rows),
+        pd.DataFrame(convergence_rows),
+    )
+
+
+
+# =============================================================================
+# METRICS / QC
+# =============================================================================
 
 def safe_mape(
     y_true: np.ndarray,
     y_pred: np.ndarray,
 ) -> float:
-
     mask = np.abs(y_true) > 1e-8
 
     if not np.any(mask):
@@ -167,970 +962,814 @@ def safe_mape(
                 / y_true[mask]
             )
         )
-        * 100
+        * 100.0
     )
 
 
-# ============================================================
-# METRICS
-# ============================================================
-
-def pooled_metrics(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
-) -> dict:
-
-    return {
-
-        "MAE":
-            float(
-                mean_absolute_error(
-                    y_true.ravel(),
-                    y_pred.ravel(),
-                )
-            ),
-
-        "RMSE":
-            float(
-                np.sqrt(
-                    mean_squared_error(
-                        y_true.ravel(),
-                        y_pred.ravel(),
-                    )
-                )
-            ),
-
-        "R2":
-            float(
-                r2_score(
-                    y_true.ravel(),
-                    y_pred.ravel(),
-                )
-            ),
-
-        "MAPE":
-            safe_mape(
-                y_true.ravel(),
-                y_pred.ravel(),
-            ),
-    }
-
-
-# ============================================================
-# LOAD TRAINING DATA
-# ============================================================
-
-def load_training_data() -> pd.DataFrame:
-
-    if not INPUT_FILE.exists():
-
-        raise FileNotFoundError(
-            "STRICT training workbook was not found:\n"
-            f"{INPUT_FILE}"
-        )
-
-    dataframe = load_excel(
-        INPUT_FILE,
-        sheet_name=0,
-        header=3,
-    )
-
-    if "Pair ID" not in dataframe.columns:
-
-        raise ValueError(
-            "Pair ID column is required "
-            "for LOPO validation."
-        )
-
-    required_columns = (
-        ICE_FEATURES
-        + EV_TARGETS
-    )
-
-    missing_columns = [
-        column
-        for column in required_columns
-        if column not in dataframe.columns
-    ]
-
-    if missing_columns:
-
-        raise ValueError(
-            "Required modelling columns are missing:\n"
-            f"{missing_columns}"
-        )
-
-    modelling_data = dataframe[
-        required_columns
-    ]
-
-    if modelling_data.isna().any().any():
-
-        raise ValueError(
-            "Missing values found in modelling columns."
-        )
-
-    non_numeric = [
-
-        column
-
-        for column in modelling_data.columns
-
-        if not pd.api.types.is_numeric_dtype(
-            modelling_data[column]
-        )
-    ]
-
-    if non_numeric:
-
-        raise ValueError(
-            "Non-numeric modelling columns found:\n"
-            f"{non_numeric}"
-        )
-
-    return dataframe
-
-
-# ============================================================
-# TRAIN ONE LOPO FOLD
-# ============================================================
-
-def train_fold(
-    X_train: np.ndarray,
-    y_train: np.ndarray,
-    X_test: np.ndarray,
-) -> np.ndarray:
-
-    # --------------------------------------------------------
-    # Scaling is fitted ONLY on training data
-    # --------------------------------------------------------
-
-    x_scaler = StandardScaler()
-
-    y_scaler = StandardScaler()
-
-    X_train_scaled = (
-        x_scaler.fit_transform(
-            X_train
-        )
-    )
-
-    y_train_scaled = (
-        y_scaler.fit_transform(
-            y_train
-        )
-    )
-
-    X_test_scaled = (
-        x_scaler.transform(
-            X_test
-        )
-    )
-
-    # --------------------------------------------------------
-    # Convert to tensors
-    # --------------------------------------------------------
-
-    X_tensor = torch.tensor(
-        X_train_scaled,
-        dtype=torch.float32,
-    )
-
-    y_tensor = torch.tensor(
-        y_train_scaled,
-        dtype=torch.float32,
-    )
-
-    X_test_tensor = torch.tensor(
-        X_test_scaled,
-        dtype=torch.float32,
-    )
-
-    # --------------------------------------------------------
-    # Model
-    # --------------------------------------------------------
-
-    model = FullDLRegressor(
-        input_dim=X_train.shape[1],
-        output_dim=y_train.shape[1],
-    )
-
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY,
-    )
-
-    loss_function = nn.MSELoss()
-
-    # --------------------------------------------------------
-    # Training
-    # --------------------------------------------------------
-
-    model.train()
-
-    for epoch in range(EPOCHS):
-
-        optimizer.zero_grad()
-
-        prediction = model(
-            X_tensor
-        )
-
-        loss = loss_function(
-            prediction,
-            y_tensor,
-        )
-
-        loss.backward()
-
-        optimizer.step()
-
-    # --------------------------------------------------------
-    # Prediction
-    # --------------------------------------------------------
-
-    model.eval()
-
-    with torch.no_grad():
-
-        scaled_prediction = (
-            model(
-                X_test_tensor
-            )
-            .cpu()
-            .numpy()
-        )
-
-    # --------------------------------------------------------
-    # Convert back to original units
-    # --------------------------------------------------------
-
-    prediction = (
-        y_scaler.inverse_transform(
-            scaled_prediction
-        )
-    )
-
-    return prediction
-
-
-# ============================================================
-# LEAVE-ONE-PAIR-OUT VALIDATION
-# ============================================================
-
-def run_lopo(
-    dataframe: pd.DataFrame,
-):
-
-    X = dataframe[
-        ICE_FEATURES
-    ].to_numpy(
-        dtype=float
-    )
-
-    y = dataframe[
-        EV_TARGETS
-    ].to_numpy(
-        dtype=float
-    )
-
-    pair_ids = (
-        dataframe["Pair ID"]
-        .astype(str)
-        .to_numpy()
-    )
-
-    unique_pairs = list(
-        dict.fromkeys(
-            pair_ids
-        )
-    )
-
-    all_true = []
-
-    all_pred = []
-
-    fold_rows = []
-
-    for pair_id in unique_pairs:
-
-        print(
-            f"\nProcessing LOPO fold: {pair_id}"
-        )
-
-        test_mask = (
-            pair_ids == pair_id
-        )
-
-        train_mask = (
-            ~test_mask
-        )
-
-        X_train = X[
-            train_mask
-        ]
-
-        y_train = y[
-            train_mask
-        ]
-
-        X_test = X[
-            test_mask
-        ]
-
-        y_test = y[
-            test_mask
-        ]
-
-        try:
-
-            prediction = train_fold(
-                X_train,
-                y_train,
-                X_test,
-            )
-
-            metrics = pooled_metrics(
-                y_test,
-                prediction,
-            )
-
-            all_true.append(
-                y_test
-            )
-
-            all_pred.append(
-                prediction
-            )
-
-            fold_rows.append({
-
-                "Pair ID":
-                    pair_id,
-
-                "Status":
-                    "SUCCESS",
-
-                "MAE":
-                    metrics["MAE"],
-
-                "RMSE":
-                    metrics["RMSE"],
-
-                "R2":
-                    metrics["R2"],
-
-                "MAPE":
-                    metrics["MAPE"],
-            })
-
-            print(
-                f"  MAE  : {metrics['MAE']:.6f}"
-            )
-
-            print(
-                f"  RMSE : {metrics['RMSE']:.6f}"
-            )
-
-            print(
-                f"  R2   : {metrics['R2']:.6f}"
-            )
-
-            print(
-                f"  MAPE : {metrics['MAPE']:.6f}"
-            )
-
-        except Exception as error:
-
-            fold_rows.append({
-
-                "Pair ID":
-                    pair_id,
-
-                "Status":
-                    "FAILED",
-
-                "Reason":
-                    str(error),
-            })
-
-            print(
-                f"  FAILED: {error}"
-            )
-
-    if not all_true:
-
-        raise RuntimeError(
-            "All LOPO folds failed."
-        )
-
-    y_true = np.vstack(
-        all_true
-    )
-
-    y_pred = np.vstack(
-        all_pred
-    )
-
-    overall_metrics = pooled_metrics(
-        y_true,
-        y_pred,
-    )
-
-    summary = pd.DataFrame([{
-
-        "Model":
-            "Full_DNN",
-
-        "Samples":
-            len(dataframe),
-
-        "Input_Features":
-            len(ICE_FEATURES),
-
-        "Output_Targets":
-            len(EV_TARGETS),
-
-        "LOPO_Folds_Successful":
-            len(all_true),
-
-        "LOPO_Folds_Total":
-            len(unique_pairs),
-
-        "MAE":
-            overall_metrics["MAE"],
-
-        "RMSE":
-            overall_metrics["RMSE"],
-
-        "R2":
-            overall_metrics["R2"],
-
-        "MAPE":
-            overall_metrics["MAPE"],
-    }])
-
-    fold_dataframe = pd.DataFrame(
-        fold_rows
-    )
-
-    return (
-        summary,
-        fold_dataframe,
-        y_true,
-        y_pred,
-    )
-
-
-# ============================================================
-# TARGET-WISE OOS METRICS
-# ============================================================
-
-def target_wise_metrics(
-    y_true: np.ndarray,
-    y_pred: np.ndarray,
+def target_metrics(
+    predictions: pd.DataFrame,
 ) -> pd.DataFrame:
-
     rows = []
 
-    for index, target in enumerate(
-        EV_TARGETS
-    ):
+    for target in EV_TARGETS:
+        actual = predictions[
+            f"Actual {target}"
+        ].to_numpy(dtype=float)
 
-        true = y_true[
-            :,
-            index
-        ]
+        predicted = predictions[
+            f"Predicted {target}"
+        ].to_numpy(dtype=float)
 
-        pred = y_pred[
-            :,
-            index
-        ]
+        raw = predictions[
+            f"Raw Predicted {target}"
+        ].to_numpy(dtype=float)
 
-        if np.allclose(
-            true,
-            true[0]
-        ):
+        baseline = predictions[
+            f"TrainingMeanBaseline {target}"
+        ].to_numpy(dtype=float)
 
-            r2 = float("nan")
-
-        else:
-
-            r2 = float(
-                r2_score(
-                    true,
-                    pred,
+        rmse = float(
+            np.sqrt(
+                mean_squared_error(
+                    actual,
+                    predicted,
                 )
             )
+        )
 
-        rows.append({
+        baseline_rmse = float(
+            np.sqrt(
+                mean_squared_error(
+                    actual,
+                    baseline,
+                )
+            )
+        )
 
-            "Target":
-                target,
-
-            "MAE":
-                float(
+        rows.append(
+            {
+                "Target": target,
+                "MAE": float(
                     mean_absolute_error(
-                        true,
-                        pred,
+                        actual,
+                        predicted,
                     )
                 ),
-
-            "RMSE":
-                float(
+                "RMSE": rmse,
+                "R2": (
+                    float(
+                        r2_score(
+                            actual,
+                            predicted,
+                        )
+                    )
+                    if len(np.unique(actual)) > 1
+                    else np.nan
+                ),
+                "Median Absolute Error": float(
+                    median_absolute_error(
+                        actual,
+                        predicted,
+                    )
+                ),
+                "MAPE (%)": safe_mape(
+                    actual,
+                    predicted,
+                ),
+                "Raw RMSE": float(
                     np.sqrt(
                         mean_squared_error(
-                            true,
-                            pred,
+                            actual,
+                            raw,
                         )
                     )
                 ),
-
-            "R2":
-                r2,
-
-            "MAPE":
-                safe_mape(
-                    true,
-                    pred,
+                "TrainingMean Baseline RMSE": baseline_rmse,
+                "Baseline Relative RMSE": (
+                    rmse / baseline_rmse
+                    if baseline_rmse > 0
+                    else np.nan
                 ),
-        })
+                "Raw Negative Predictions": int(
+                    predictions[
+                        f"Raw Negative Flag {target}"
+                    ].sum()
+                ),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def qc_table(
+    predictions: pd.DataFrame,
+) -> pd.DataFrame:
+    phases = (
+        "STOP",
+        "IDLE",
+        "INCHING",
+        "ACC",
+        "DEC",
+        "CRUISE",
+    )
+
+    rows = []
+
+    for _, record in predictions.iterrows():
+        negative_targets = [
+            target
+            for target in EV_TARGETS
+            if bool(
+                record[
+                    f"Raw Negative Flag {target}"
+                ]
+            )
+        ]
+
+        phase_distance = sum(
+            float(
+                record[
+                    f"Predicted EV {phase} Distance (km)"
+                ]
+            )
+            for phase in phases
+        )
+
+        phase_time = float(
+            record[
+                "Predicted Six-Phase Time Sum Before Charging (min)"
+            ]
+        )
+
+        rows.append(
+            {
+                "Pair ID": record["Pair ID"],
+                "Pair Class": record["Pair Class"],
+                "Raw Negative Target Count": len(negative_targets),
+                "Raw Negative Targets": " | ".join(negative_targets),
+                "Predicted Total Distance (km)": float(
+                    record["Predicted EV Total Distance (km)"]
+                ),
+                "Sum Predicted Phase Distances (km)": phase_distance,
+                "Distance Closure Residual (km)": (
+                    float(
+                        record[
+                            "Predicted EV Total Distance (km)"
+                        ]
+                    )
+                    - phase_distance
+                ),
+                "Direct Predicted EV Total TAT (min)": float(
+                    record[
+                        "Predicted EV Total TAT (min)"
+                    ]
+                ),
+                "Six-Phase Time Sum Before Charging (min)": (
+                    phase_time
+                ),
+            }
+        )
+
+    return pd.DataFrame(rows)
+
+
+def overall_summary(
+    predictions: pd.DataFrame,
+    metrics: pd.DataFrame,
+    folds: pd.DataFrame,
+) -> pd.DataFrame:
+    ratios = (
+        metrics["Baseline Relative RMSE"]
+        .replace([np.inf, -np.inf], np.nan)
+        .dropna()
+    )
 
     return pd.DataFrame(
-        rows
+        [
+            {
+                "Model": "Full_DNN_Fixed_Ensemble",
+                "OOS Pairs": len(predictions),
+                "Inputs": len(ICE_FEATURES),
+                "Outputs": len(EV_TARGETS),
+                "Selection Method": "PREDECLARED_FIXED_NO_HPO",
+                "Mean Target-wise Baseline-Relative RMSE": (
+                    float(ratios.mean())
+                    if not ratios.empty
+                    else np.nan
+                ),
+                "Median Target-wise Baseline-Relative RMSE": (
+                    float(ratios.median())
+                    if not ratios.empty
+                    else np.nan
+                ),
+                "Targets Better Than Baseline": int(
+                    (
+                        metrics["Baseline Relative RMSE"]
+                        < 1.0
+                    ).sum()
+                ),
+                "Mean Outer Standardized RMSE": float(
+                    folds["Model Standardized RMSE"].mean()
+                ),
+            }
+        ]
     )
 
 
-# ============================================================
-# FINAL MODEL
-# ============================================================
+# =============================================================================
+# FINAL DEPLOYMENT ENSEMBLE
+# =============================================================================
 
-def fit_final_model(
+def save_final_models(
     dataframe: pd.DataFrame,
-):
-
-    X = dataframe[
-        ICE_FEATURES
-    ].to_numpy(
-        dtype=float
-    )
-
-    y = dataframe[
-        EV_TARGETS
-    ].to_numpy(
-        dtype=float
-    )
+    scope: str,
+    model_dir: Path,
+    seeds: tuple[int, ...],
+    device: torch.device,
+    hp: HParams,
+    epochs: int,
+    gradient_clip: float,
+) -> tuple[Path, pd.DataFrame]:
+    X = dataframe[ICE_FEATURES].to_numpy(dtype=float)
+    y = dataframe[EV_TARGETS].to_numpy(dtype=float)
 
     x_scaler = StandardScaler()
-
     y_scaler = StandardScaler()
 
-    X_scaled = (
-        x_scaler.fit_transform(
-            X
-        )
-    )
+    X_scaled = x_scaler.fit_transform(X)
+    y_scaled = y_scaler.fit_transform(y)
 
-    y_scaled = (
-        y_scaler.fit_transform(
-            y
-        )
-    )
+    selected_dir = model_dir / "Selected_Final"
+    selected_dir.mkdir(parents=True, exist_ok=True)
 
-    X_tensor = torch.tensor(
-        X_scaled,
-        dtype=torch.float32,
-    )
+    convergence_rows: list[dict[str, Any]] = []
 
-    y_tensor = torch.tensor(
-        y_scaled,
-        dtype=torch.float32,
-    )
-
-    model = FullDLRegressor(
-        input_dim=len(
-            ICE_FEATURES
-        ),
-        output_dim=len(
-            EV_TARGETS
-        ),
-    )
-
-    optimizer = torch.optim.Adam(
-        model.parameters(),
-        lr=LEARNING_RATE,
-        weight_decay=WEIGHT_DECAY,
-    )
-
-    loss_function = nn.MSELoss()
-
-    model.train()
-
-    for epoch in range(
-        EPOCHS
-    ):
-
-        optimizer.zero_grad()
-
-        prediction = model(
-            X_tensor
+    for seed in seeds:
+        model, convergence = train_fixed(
+            X_scaled=X_scaled,
+            y_scaled=y_scaled,
+            hp=hp,
+            epochs=epochs,
+            seed=seed,
+            device=device,
+            gradient_clip=gradient_clip,
         )
 
-        loss = loss_function(
-            prediction,
-            y_tensor,
+        convergence_rows.append(
+            {
+                "Dataset Scope": scope,
+                "Training Role": "FINAL_DEPLOYMENT_FIT",
+                "Outer Fold": np.nan,
+                "Held-Out Pair ID": "",
+                "Held-Out Pair Class": "",
+                **convergence,
+            }
         )
 
-        loss.backward()
+        checkpoint = {
+            "script_version": SCRIPT_VERSION,
+            "model_source": "FULL_DL",
+            "dataset_scope": scope,
+            "seed": int(seed),
+            "hidden_layers": list(hp.hidden_layers),
+            "dropout": float(hp.dropout),
+            "learning_rate": float(hp.learning_rate),
+            "weight_decay": float(hp.weight_decay),
+            "epochs": int(epochs),
+            "selection_method": HYPERPARAMETER_SELECTION_METHOD,
+            "hyperparameter_interpretation": (
+                HYPERPARAMETER_INTERPRETATION
+            ),
+            "input_features": ICE_FEATURES,
+            "target_features": EV_TARGETS,
+            "state_dict": {
+                key: value.detach().cpu()
+                for key, value in model.state_dict().items()
+            },
+        }
 
-        optimizer.step()
+        torch.save(
+            checkpoint,
+            selected_dir / f"Full_DNN_seed_{seed}.pt",
+        )
 
-    return {
-
-        "model":
-            model,
-
-        "x_scaler":
-            x_scaler,
-
-        "y_scaler":
-            y_scaler,
-
-        "input_features":
-            ICE_FEATURES,
-
-        "target_features":
-            EV_TARGETS,
-
-        "epochs":
-            EPOCHS,
-
-        "learning_rate":
-            LEARNING_RATE,
-
-        "weight_decay":
-            WEIGHT_DECAY,
-
-        "hidden_layers":
-            [
-                HIDDEN_1,
-                HIDDEN_2
-            ],
-
-        "random_seed":
-            RANDOM_SEED,
-    }
-
-
-# ============================================================
-# MAIN
-# ============================================================
-
-def main() -> None:
-
-    set_seed()
-
-    print(
-        "\n"
-        + "=" * 70
+    joblib.dump(
+        x_scaler,
+        selected_dir / "x_scaler.joblib",
     )
 
-    print(
-        "FULL DL — EV PREDICTION FROM ICE"
+    joblib.dump(
+        y_scaler,
+        selected_dir / "y_scaler.joblib",
     )
-
-    print(
-        "=" * 70
-    )
-
-    print(
-        f"Input workbook : {INPUT_FILE}"
-    )
-
-    print(
-        "Device         : "
-        f"{'cuda' if torch.cuda.is_available() else 'cpu'}"
-    )
-
-    print(
-        "Data scope     : STRICT pairs only"
-    )
-
-    print(
-        "Validation     : LOPO by Pair ID"
-    )
-
-    print(
-        f"Input/Output   : "
-        f"{len(ICE_FEATURES)} -> "
-        f"{len(EV_TARGETS)}"
-    )
-
-    print(
-        "=" * 70
-    )
-
-    # --------------------------------------------------------
-    # Load
-    # --------------------------------------------------------
-
-    dataframe = (
-        load_training_data()
-    )
-
-    print(
-        f"Rows loaded    : "
-        f"{len(dataframe)}"
-    )
-
-    print(
-        f"Unique Pair IDs: "
-        f"{dataframe['Pair ID'].nunique()}"
-    )
-
-    # --------------------------------------------------------
-    # LOPO
-    # --------------------------------------------------------
 
     (
-        summary,
-        folds,
-        y_true,
-        y_pred,
-    ) = run_lopo(
-        dataframe
+        selected_dir / "hyperparameters.json"
+    ).write_text(
+        json.dumps(
+            {
+                "selection_method": HYPERPARAMETER_SELECTION_METHOD,
+                "hyperparameter_interpretation": (
+                    HYPERPARAMETER_INTERPRETATION
+                ),
+                "hyperparameter_rationale": HYPERPARAMETER_RATIONALE,
+                "predeclared_meaning": PREDECLARED_MEANING,
+                "architecture": arch_to_text(hp.hidden_layers),
+                "hidden_layers": list(hp.hidden_layers),
+                "dropout": hp.dropout,
+                "learning_rate": hp.learning_rate,
+                "weight_decay": hp.weight_decay,
+                "fixed_epochs": epochs,
+                "ensemble_seeds": list(seeds),
+                "hpo_used": False,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    # --------------------------------------------------------
-    # Target-wise results
-    # --------------------------------------------------------
-
-    target_dataframe = (
-        target_wise_metrics(
-            y_true,
-            y_pred,
-        )
+    (
+        selected_dir / "feature_schema.json"
+    ).write_text(
+        json.dumps(
+            {
+                "input_features": ICE_FEATURES,
+                "excluded_constant_ice_features": (
+                    EXCLUDED_CONSTANT_ICE_FEATURES
+                ),
+                "input_count": 15,
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    # --------------------------------------------------------
-    # Create directories
-    # --------------------------------------------------------
-
-    RESULTS_DIR.mkdir(
-        parents=True,
-        exist_ok=True
+    (
+        selected_dir / "target_schema.json"
+    ).write_text(
+        json.dumps(
+            {
+                "target_features": EV_TARGETS,
+                "target_count": 15,
+                "physical_postprocessing": (
+                    "max(raw_prediction, 0)"
+                ),
+                "charging": (
+                    "external common charging_time.py"
+                ),
+                "final_assembly": (
+                    "external common final_tat_assembly.py"
+                ),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    MODEL_DIR.mkdir(
-        parents=True,
-        exist_ok=True
+    return (
+        selected_dir,
+        pd.DataFrame(
+            convergence_rows
+        ),
     )
 
-    # --------------------------------------------------------
-    # Save LOPO summary
-    # --------------------------------------------------------
+
+
+# =============================================================================
+# RUN ONE SCOPE
+# =============================================================================
+
+def run_scope(
+    args: argparse.Namespace,
+    scope: str,
+    device: torch.device,
+    seeds: tuple[int, ...],
+    hp: HParams,
+) -> None:
+    scope = normalize_scope(scope)
+    results_dir, model_dir = output_dirs(scope)
+
+    print("\n" + "=" * 92)
+    print(f"FULL DL — FIXED PREDECLARED LOPO | {scope}")
+    print("=" * 92)
+    print(f"Version      : {SCRIPT_VERSION}")
+    print(f"Device       : {device}")
+    print(f"Architecture : 15 -> {arch_to_text(hp.hidden_layers)} -> 15")
+    print(f"Dropout      : {hp.dropout}")
+    print(f"LR           : {hp.learning_rate}")
+    print(f"Weight decay : {hp.weight_decay}")
+    print(f"Epochs       : {args.epochs}")
+    print(f"Seeds        : {seeds}")
+    print("HPO          : DISABLED")
+    print(f"HP status    : {HYPERPARAMETER_INTERPRETATION}")
+    print("Evaluation   : LOPO only")
+    print("Pair Class   : READ / VALIDATE / PRESERVE ONLY")
+    print("Convergence  : training-loss diagnostic saved; not model selection")
+
+    dataframe, input_files, report = load_scope(scope)
+
+    print(f"Rows         : {len(dataframe)}")
+    print(f"STRICT       : {report['strict_rows']}")
+    print(f"NONSTRICT    : {report['nonstrict_rows']}")
+
+    predictions, folds, outer_convergence = run_lopo(
+        dataframe=dataframe,
+        scope=scope,
+        seeds=seeds,
+        device=device,
+        hp=hp,
+        epochs=args.epochs,
+        gradient_clip=args.gradient_clip_norm,
+    )
+
+    metrics = target_metrics(predictions)
+    qc = qc_table(predictions)
+    summary = overall_summary(predictions, metrics, folds)
+
+    selected_dir, final_convergence = save_final_models(
+        dataframe=dataframe,
+        scope=scope,
+        model_dir=model_dir,
+        seeds=seeds,
+        device=device,
+        hp=hp,
+        epochs=args.epochs,
+        gradient_clip=args.gradient_clip_norm,
+    )
+
+    convergence = pd.concat(
+        [
+            outer_convergence,
+            final_convergence,
+        ],
+        ignore_index=True,
+        sort=False,
+    )
+
+    results_dir.mkdir(parents=True, exist_ok=True)
+
+    manifest_rows = [
+        ("Script Version", SCRIPT_VERSION),
+        ("Dataset Scope", scope),
+        ("Input Files", " | ".join(str(p) for p in input_files)),
+        (
+            "Input SHA256",
+            " | ".join(
+                f"{p.name}:{file_sha256(p)}"
+                for p in input_files
+            ),
+        ),
+        ("Rows", len(dataframe)),
+        ("Unique Pairs", dataframe[PAIR_COLUMN].nunique()),
+        ("STRICT Rows", report["strict_rows"]),
+        ("NONSTRICT Rows", report["nonstrict_rows"]),
+        ("Pair Class Handling", "READ / VALIDATE / PRESERVE ONLY"),
+        ("Pair Class Recalculation", "NONE"),
+        ("Pair Class Overwrite", "NONE"),
+        ("Pair Class Used As Predictor", "NO"),
+        ("Outer Evaluation", "Leave-One-Pair-Out"),
+        ("Hyperparameter Search", "DISABLED"),
+        ("Selection Method", HYPERPARAMETER_SELECTION_METHOD),
+        (
+            "Hyperparameter Interpretation",
+            HYPERPARAMETER_INTERPRETATION,
+        ),
+        ("Hyperparameter Rationale", HYPERPARAMETER_RATIONALE),
+        ("Predeclared Meaning", PREDECLARED_MEANING),
+        ("Architecture", arch_to_text(hp.hidden_layers)),
+        ("Dropout", hp.dropout),
+        ("Learning Rate", hp.learning_rate),
+        ("Weight Decay", hp.weight_decay),
+        ("Fixed Epochs", args.epochs),
+        ("Activation", "ReLU"),
+        ("Optimizer", "AdamW"),
+        ("Loss", "MSELoss"),
+        (
+            "Scaler",
+            "StandardScaler fit on each outer training fold only",
+        ),
+        ("Gradient Clipping", args.gradient_clip_norm),
+        ("Ensemble Seeds", " | ".join(str(s) for s in seeds)),
+        (
+            "Physical Constraint",
+            "max(raw_prediction, 0), identical in OOS and inference",
+        ),
+        (
+            "Convergence Evidence",
+            "Per-seed training-loss diagnostics saved separately",
+        ),
+        (
+            "Convergence Interpretation",
+            CONVERGENCE_INTERPRETATION,
+        ),
+        ("Charging", "NOT calculated in training code"),
+        ("Final Assembly", "NOT calculated in training code"),
+        ("Python", sys.version.replace("\n", " ")),
+        ("Platform", platform.platform()),
+        ("NumPy", np.__version__),
+        ("Pandas", pd.__version__),
+        ("PyTorch", torch.__version__),
+        ("Device", str(device)),
+    ]
+
+    manifest = pd.DataFrame(
+        manifest_rows,
+        columns=["Parameter", "Value"],
+    )
+
+    predictions.to_excel(
+        results_dir / "Full_DL_LOPO_OOS_Predictions.xlsx",
+        index=False,
+    )
+
+    metrics.to_excel(
+        results_dir / "Full_DL_Target_Wise_OOS_Metrics.xlsx",
+        index=False,
+    )
 
     summary.to_excel(
-        RESULTS_DIR
-        / "Full_DL_LOPO_Summary.xlsx",
+        results_dir / "Full_DL_OOS_Summary.xlsx",
         index=False,
     )
 
-    # --------------------------------------------------------
-    # Save fold results
-    # --------------------------------------------------------
+    qc.to_excel(
+        results_dir / "Full_DL_Physical_QC.xlsx",
+        index=False,
+    )
 
     folds.to_excel(
-        RESULTS_DIR
-        / "Full_DL_LOPO_Folds.xlsx",
+        results_dir / "Full_DL_Outer_Folds.xlsx",
         index=False,
     )
 
-    # --------------------------------------------------------
-    # Save target-wise results
-    # --------------------------------------------------------
-
-    target_dataframe.to_excel(
-        RESULTS_DIR
-        / "Full_DL_Target_Wise_OOS.xlsx",
+    convergence.to_excel(
+        results_dir / "Full_DL_Training_Convergence.xlsx",
         index=False,
     )
 
-    # --------------------------------------------------------
-    # Save OOS predictions
-    # --------------------------------------------------------
-
-    prediction_dataframe = pd.DataFrame()
-
-    for index, target in enumerate(
-        EV_TARGETS
-    ):
-
-        prediction_dataframe[
-            f"Actual {target}"
-        ] = y_true[
-            :,
-            index
-        ]
-
-        prediction_dataframe[
-            f"Predicted {target}"
-        ] = y_pred[
-            :,
-            index
-        ]
-
-    prediction_dataframe.to_excel(
-        RESULTS_DIR
-        / "Full_DL_OOS_Predictions.xlsx",
+    manifest.to_excel(
+        results_dir / "Full_DL_Run_Manifest.xlsx",
         index=False,
     )
 
-    # --------------------------------------------------------
-    # Configuration
-    # --------------------------------------------------------
-
-    configuration = pd.DataFrame([
-
-        [
-            "Architecture",
-            f"15 -> {HIDDEN_1} -> "
-            f"{HIDDEN_2} -> 15",
-        ],
-
-        [
-            "Epochs",
-            EPOCHS,
-        ],
-
-        [
-            "Learning rate",
-            LEARNING_RATE,
-        ],
-
-        [
-            "Weight decay",
-            WEIGHT_DECAY,
-        ],
-
-        [
-            "Scaling",
-            "StandardScaler fitted "
-            "inside each LOPO fold",
-        ],
-
-        [
-            "Validation",
-            "Leave-One-Pair-Out "
-            "by Pair ID",
-        ],
-
-        [
-            "Charging/refuelling",
-            "Separate; not a DL target",
-        ],
-
-        [
-            "Samples",
-            len(dataframe),
-        ],
-
-    ], columns=[
-        "Parameter",
-        "Value",
-    ])
-
-    configuration.to_excel(
-        RESULTS_DIR
-        / "Full_DL_Configuration.xlsx",
-        index=False,
-    )
-
-    # --------------------------------------------------------
-    # Train final model on all STRICT pairs
-    # --------------------------------------------------------
-
-    final_model = fit_final_model(
-        dataframe
-    )
-
-    final_model_path = (
-        MODEL_DIR
-        / "Full_DNN_Final.pkl"
-    )
-
-    with open(
-        final_model_path,
-        "wb",
-    ) as file:
-
-        pickle.dump(
-            final_model,
-            file
+    with pd.ExcelWriter(
+        results_dir / "Full_DL_Detailed_Evaluation.xlsx",
+        engine="openpyxl",
+    ) as writer:
+        summary.to_excel(
+            writer,
+            sheet_name="01_Overall",
+            index=False,
         )
 
-    # --------------------------------------------------------
-    # Print results
-    # --------------------------------------------------------
+        metrics.to_excel(
+            writer,
+            sheet_name="02_Target_Metrics",
+            index=False,
+        )
 
-    print(
-        "\nFULL DL LOPO RESULT"
+        folds.to_excel(
+            writer,
+            sheet_name="03_Outer_Folds",
+            index=False,
+        )
+
+        qc.to_excel(
+            writer,
+            sheet_name="04_Physical_QC",
+            index=False,
+        )
+
+        convergence.to_excel(
+            writer,
+            sheet_name="05_Convergence",
+            index=False,
+        )
+
+        manifest.to_excel(
+            writer,
+            sheet_name="06_Manifest",
+            index=False,
+        )
+
+    (
+        selected_dir / "training_manifest.json"
+    ).write_text(
+        json.dumps(
+            {
+                "script_version": SCRIPT_VERSION,
+                "dataset_scope": scope,
+                "input_files": [str(p) for p in input_files],
+                "input_sha256": {
+                    p.name: file_sha256(p)
+                    for p in input_files
+                },
+                "rows": len(dataframe),
+                "unique_pairs": int(
+                    dataframe[PAIR_COLUMN].nunique()
+                ),
+                "pair_class_handling": (
+                    "READ / VALIDATE / PRESERVE ONLY"
+                ),
+                "pair_class_recalculation": "NONE",
+                "pair_class_overwrite": "NONE",
+                "pair_class_used_as_predictor": False,
+                "selection_method": HYPERPARAMETER_SELECTION_METHOD,
+                "hyperparameter_interpretation": (
+                    HYPERPARAMETER_INTERPRETATION
+                ),
+                "hyperparameter_rationale": HYPERPARAMETER_RATIONALE,
+                "predeclared_meaning": PREDECLARED_MEANING,
+                "architecture": arch_to_text(hp.hidden_layers),
+                "dropout": hp.dropout,
+                "learning_rate": hp.learning_rate,
+                "weight_decay": hp.weight_decay,
+                "fixed_epochs": args.epochs,
+                "ensemble_seeds": list(seeds),
+                "hpo_used": False,
+                "convergence_diagnostic": (
+                    "Full_DL_Training_Convergence.xlsx; "
+                    + CONVERGENCE_INTERPRETATION
+                ),
+                "physical_postprocessing": (
+                    "max(raw_prediction, 0)"
+                ),
+                "charging": (
+                    "external common charging_time.py"
+                ),
+                "final_assembly": (
+                    "external common final_tat_assembly.py"
+                ),
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
     )
 
-    print(
-        "-" * 70
-    )
+    print("\n" + "=" * 92)
+    print(f"FULL DL COMPLETED | {scope}")
+    print("=" * 92)
+    print(f"OOS pairs       : {len(predictions)}")
+    print(f"Final models    : {selected_dir}")
+    print(f"Results         : {results_dir}")
+    print("Nested HPO      : REMOVED")
+    print(f"Hyperparameters : {HYPERPARAMETER_INTERPRETATION}")
+    print("Convergence     : Full_DL_Training_Convergence.xlsx")
+    print("Pair Class      : NOT recalculated or overwritten")
 
-    print(
-        summary.to_string(
-            index=False
+
+
+# =============================================================================
+# CLI
+# =============================================================================
+
+def parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Full-DL fixed predeclared LOPO research pipeline. "
+            "No nested Optuna/HPO."
         )
     )
 
-    print(
-        "\nTARGET-WISE OOS RESULT"
+    parser.add_argument(
+        "--scope",
+        choices=[
+            "STRICT",
+            "NONSTRICT",
+            "COMBINED",
+            "ALL",
+        ],
+        default="ALL",
     )
 
-    print(
-        "-" * 70
+    parser.add_argument(
+        "--device",
+        choices=[
+            "auto",
+            "cpu",
+            "cuda",
+        ],
+        default="auto",
     )
 
-    print(
-        target_dataframe.to_string(
-            index=False
+    parser.add_argument(
+        "--ensemble-seeds",
+        default=",".join(
+            str(seed)
+            for seed in ENSEMBLE_SEEDS_DEFAULT
+        ),
+    )
+
+    parser.add_argument(
+        "--architecture",
+        default=arch_to_text(DEFAULT_HIDDEN_LAYERS),
+        help="Predeclared hidden-layer widths, e.g. 16-8.",
+    )
+
+    parser.add_argument(
+        "--dropout",
+        type=float,
+        default=DEFAULT_DROPOUT,
+    )
+
+    parser.add_argument(
+        "--learning-rate",
+        type=float,
+        default=DEFAULT_LEARNING_RATE,
+    )
+
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=DEFAULT_WEIGHT_DECAY,
+    )
+
+    parser.add_argument(
+        "--epochs",
+        "--max-epochs",
+        dest="epochs",
+        type=int,
+        default=DEFAULT_EPOCHS,
+        help=(
+            "Fixed training epochs. --max-epochs is retained "
+            "as a backward-compatible alias."
+        ),
+    )
+
+    parser.add_argument(
+        "--gradient-clip-norm",
+        type=float,
+        default=DEFAULT_GRADIENT_CLIP,
+    )
+
+    return parser
+
+
+def main() -> None:
+    args = parser().parse_args()
+
+    if args.epochs < 1:
+        raise ValueError("--epochs must be >= 1.")
+
+    if not (0 <= args.dropout < 1):
+        raise ValueError("--dropout must be in [0, 1).")
+
+    if args.learning_rate <= 0:
+        raise ValueError("--learning-rate must be > 0.")
+
+    if args.weight_decay < 0:
+        raise ValueError("--weight-decay must be >= 0.")
+
+    if args.gradient_clip_norm <= 0:
+        raise ValueError("--gradient-clip-norm must be > 0.")
+
+    requested_scope = normalize_scope(
+        args.scope,
+        allow_all=True,
+    )
+
+    scopes = (
+        ["STRICT", "NONSTRICT", "COMBINED"]
+        if requested_scope == "ALL"
+        else [requested_scope]
+    )
+
+    seeds = parse_seeds(args.ensemble_seeds)
+    device = resolve_device(args.device)
+
+    hp = HParams(
+        hidden_layers=parse_architecture(args.architecture),
+        dropout=float(args.dropout),
+        learning_rate=float(args.learning_rate),
+        weight_decay=float(args.weight_decay),
+    )
+
+    print("=" * 92)
+    print("FULL DL — FIXED PREDECLARED LOPO")
+    print("=" * 92)
+    print(f"Version : {SCRIPT_VERSION}")
+    print(f"Scopes  : {scopes}")
+    print(f"Device  : {device}")
+    print(f"Seeds   : {seeds}")
+    print("HPO     : DISABLED")
+
+    for scope in scopes:
+        run_scope(
+            args=args,
+            scope=scope,
+            device=device,
+            seeds=seeds,
+            hp=hp,
         )
-    )
 
-    print(
-        "\nResults saved to:"
-    )
-
-    print(
-        RESULTS_DIR
-    )
-
-    print(
-        "\nFinal model saved to:"
-    )
-
-    print(
-        final_model_path
-    )
-
-    print(
-        "\n"
-        + "=" * 70
-    )
-
-    print(
-        "FULL DL COMPLETED"
-    )
-
-    print(
-        "=" * 70
-    )
+    print("\n" + "=" * 92)
+    print("ALL REQUESTED FULL-DL RUNS COMPLETED")
+    print("=" * 92)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        traceback.print_exc()
+        raise

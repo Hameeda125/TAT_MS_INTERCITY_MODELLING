@@ -1,0 +1,28 @@
+{
+  "script_version": "2026-09-30_FULL_DL_V7_15X15_TRIPLEVEL_PLUS_RECONSTRUCTED",
+  "dataset_scope": "NONSTRICT",
+  "input_files": [
+    "D:\\Hameeda_Projects\\TAT_MS_INTERCITY\\Data\\Results\\Master_Summary\\Training_Data\\EV_ICE_Training_NONSTRICT.xlsx"
+  ],
+  "input_sha256": {
+    "EV_ICE_Training_NONSTRICT.xlsx": "881ec47417e9ed42683ac7188da215429057ba1dacbafeece2fba572935d0f3f"
+  },
+  "rows": 28,
+  "unique_pairs": 28,
+  "pair_class_handling": "READ / VALIDATE / PRESERVE ONLY",
+  "pair_class_recalculation": "NONE",
+  "pair_class_overwrite": "NONE",
+  "pair_class_used_as_predictor": false,
+  "ensemble_seeds": [
+    42,
+    123,
+    2026,
+    31415,
+    27182
+  ],
+  "physical_postprocessing": "max(raw_prediction, 0)",
+  "direct_tat_role": "MODEL-PREDICTED TRIP-LEVEL OUTPUT",
+  "final_tat_role": "COMMON DOWNSTREAM CALCULATED TAT; RETAIN DIRECT MODEL PREDICTION TOO",
+  "final_distance_role": "COMMON DOWNSTREAM CALCULATED DISTANCE; RETAIN DIRECT MODEL PREDICTION TOO",
+  "final_average_moving_speed_role": "COMMON DOWNSTREAM CALCULATED MOVING SPEED; RETAIN DIRECT MODEL PREDICTION TOO"
+}

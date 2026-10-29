@@ -1,0 +1,8 @@
+{
+  "phase": "DEC",
+  "input_features": [
+    "ICE DEC Time (min)",
+    "ICE DEC Distance (km)"
+  ],
+  "input_count": 2
+}

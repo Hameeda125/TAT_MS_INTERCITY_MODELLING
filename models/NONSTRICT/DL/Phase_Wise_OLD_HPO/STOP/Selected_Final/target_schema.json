@@ -1,0 +1,9 @@
+{
+  "phase": "STOP",
+  "target_features": [
+    "EV STOP Time (min)",
+    "EV STOP Distance (km)"
+  ],
+  "target_count": 2,
+  "final_calculated_tat": "handled only by common downstream TAT assembler"
+}

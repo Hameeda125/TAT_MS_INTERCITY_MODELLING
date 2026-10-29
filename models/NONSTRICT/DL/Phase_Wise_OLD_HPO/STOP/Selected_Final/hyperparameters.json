@@ -1,0 +1,13 @@
+{
+  "phase": "STOP",
+  "architecture": "8-4",
+  "hidden_layers": [
+    8,
+    4
+  ],
+  "dropout": 0.0,
+  "learning_rate": 0.002990372551254822,
+  "weight_decay": 2.489021232136433e-05,
+  "selected_epochs": 149,
+  "selection_objective": "mean inner-CV MSE across the phase's two standardized EV targets"
+}

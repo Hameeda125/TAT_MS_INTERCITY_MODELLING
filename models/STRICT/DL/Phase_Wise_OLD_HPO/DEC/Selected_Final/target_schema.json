@@ -1,0 +1,9 @@
+{
+  "phase": "DEC",
+  "target_features": [
+    "EV DEC Time (min)",
+    "EV DEC Distance (km)"
+  ],
+  "target_count": 2,
+  "final_assembly": "external common final_tat_assembly.py"
+}

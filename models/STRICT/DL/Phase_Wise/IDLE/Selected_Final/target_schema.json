@@ -1,0 +1,9 @@
+{
+  "phase": "IDLE",
+  "target_features": [
+    "EV IDLE Time (min)",
+    "EV IDLE Distance (km)"
+  ],
+  "target_count": 2,
+  "final_assembly": "external common final_tat_assembly.py"
+}

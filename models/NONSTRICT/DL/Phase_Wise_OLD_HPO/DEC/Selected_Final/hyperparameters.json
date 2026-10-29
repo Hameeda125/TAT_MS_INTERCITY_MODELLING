@@ -1,0 +1,12 @@
+{
+  "phase": "DEC",
+  "architecture": "4",
+  "hidden_layers": [
+    4
+  ],
+  "dropout": 0.1,
+  "learning_rate": 0.0017575687299526634,
+  "weight_decay": 1.7943957732169037e-06,
+  "selected_epochs": 217,
+  "selection_objective": "mean inner-CV MSE across the phase's two standardized EV targets"
+}

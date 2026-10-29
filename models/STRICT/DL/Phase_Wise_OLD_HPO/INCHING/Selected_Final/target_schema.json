@@ -1,0 +1,9 @@
+{
+  "phase": "INCHING",
+  "target_features": [
+    "EV INCHING Time (min)",
+    "EV INCHING Distance (km)"
+  ],
+  "target_count": 2,
+  "final_assembly": "external common final_tat_assembly.py"
+}

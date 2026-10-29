@@ -1,0 +1,8 @@
+{
+  "phase": "IDLE",
+  "input_features": [
+    "ICE IDLE Time (min)",
+    "ICE IDLE Distance (km)"
+  ],
+  "input_count": 2
+}

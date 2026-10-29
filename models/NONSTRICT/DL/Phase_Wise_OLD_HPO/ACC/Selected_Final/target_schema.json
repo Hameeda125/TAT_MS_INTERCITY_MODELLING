@@ -1,0 +1,9 @@
+{
+  "phase": "ACC",
+  "target_features": [
+    "EV ACC Time (min)",
+    "EV ACC Distance (km)"
+  ],
+  "target_count": 2,
+  "final_calculated_tat": "handled only by common downstream TAT assembler"
+}

@@ -38,7 +38,7 @@ def load_excel(
         Loaded Excel worksheet.
     """
 
-    path = Path(file_path)
+    path = Path(file_path).expanduser()
 
     # --------------------------------------------------------
     # Validate file
@@ -56,11 +56,11 @@ def load_excel(
 
     if path.suffix.lower() not in {
         ".xlsx",
-        ".xls",
+        ".xlsm",
     }:
         raise ValueError(
             f"Unsupported Excel file type: {path.suffix}. "
-            "Expected .xlsx or .xls."
+            "Expected .xlsx or .xlsm."
         )
 
     # --------------------------------------------------------
@@ -102,7 +102,7 @@ def load_excel(
         )
 
     # --------------------------------------------------------
-    # Clean column names
+    # Clean column names only
     # --------------------------------------------------------
 
     dataframe.columns = [
@@ -124,7 +124,7 @@ def load_csv(
     Load a CSV file into a pandas DataFrame.
     """
 
-    path = Path(file_path)
+    path = Path(file_path).expanduser()
 
     if not path.exists():
         raise FileNotFoundError(
@@ -142,24 +142,37 @@ def load_csv(
             "Expected .csv."
         )
 
-    try:
-        dataframe = pd.read_csv(
-            path,
-            encoding="utf-8-sig",
-        )
+    last_error: Exception | None = None
 
-    except UnicodeDecodeError:
-        dataframe = pd.read_csv(
-            path,
-            encoding="cp1252",
-        )
+    for encoding in (
+        "utf-8-sig",
+        "utf-8",
+        "cp1252",
+        "latin-1",
+    ):
+        try:
+            dataframe = pd.read_csv(
+                path,
+                encoding=encoding,
+            )
+            break
 
-    except Exception as error:
+        except UnicodeDecodeError as error:
+            last_error = error
+
+        except Exception as error:
+            raise RuntimeError(
+                f"Failed to read CSV file:\n"
+                f"{path}\n"
+                f"Reason: {error}"
+            ) from error
+
+    else:
         raise RuntimeError(
-            f"Failed to read CSV file:\n"
+            f"Could not decode CSV file:\n"
             f"{path}\n"
-            f"Reason: {error}"
-        ) from error
+            f"Reason: {last_error}"
+        )
 
     if dataframe.empty:
         raise ValueError(
@@ -184,6 +197,9 @@ def inspect_dataframe(
 ) -> dict:
     """
     Generate a basic structural summary of a dataframe.
+
+    This function reports data quality information only.
+    It does not modify the dataframe.
     """
 
     if not isinstance(dataframe, pd.DataFrame):

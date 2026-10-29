@@ -1,0 +1,48 @@
+{
+  "target_features": [
+    "EV Total Distance (km)",
+    "EV Total TAT (min)",
+    "EV Average Moving Speed (km/h)",
+    "EV STOP Time (min)",
+    "EV IDLE Time (min)",
+    "EV INCHING Time (min)",
+    "EV ACC Time (min)",
+    "EV DEC Time (min)",
+    "EV CRUISE Time (min)",
+    "EV STOP Distance (km)",
+    "EV IDLE Distance (km)",
+    "EV INCHING Distance (km)",
+    "EV ACC Distance (km)",
+    "EV DEC Distance (km)",
+    "EV CRUISE Distance (km)"
+  ],
+  "target_count": 15,
+  "trip_level_targets": [
+    "EV Total Distance (km)",
+    "EV Total TAT (min)",
+    "EV Average Moving Speed (km/h)"
+  ],
+  "phase_time_targets": [
+    "EV STOP Time (min)",
+    "EV IDLE Time (min)",
+    "EV INCHING Time (min)",
+    "EV ACC Time (min)",
+    "EV DEC Time (min)",
+    "EV CRUISE Time (min)"
+  ],
+  "phase_distance_targets": [
+    "EV STOP Distance (km)",
+    "EV IDLE Distance (km)",
+    "EV INCHING Distance (km)",
+    "EV ACC Distance (km)",
+    "EV DEC Distance (km)",
+    "EV CRUISE Distance (km)"
+  ],
+  "direct_total_tat_role": "MODEL-PREDICTED TRIP-LEVEL OUTPUT; retain alongside calculated TAT",
+  "direct_total_distance_role": "MODEL-PREDICTED TRIP-LEVEL OUTPUT; retain alongside calculated distance",
+  "direct_average_moving_speed_role": "MODEL-PREDICTED TRIP-LEVEL OUTPUT; retain alongside calculated moving speed",
+  "calculated_tat_formula": "STOP + IDLE + INCHING + ACC + DEC + CRUISE + common physical charging",
+  "calculated_distance_formula": "STOP + IDLE + INCHING + ACC + DEC + CRUISE phase distances; charging distance = 0 km",
+  "calculated_average_moving_speed_formula": "(INCHING + ACC + DEC + CRUISE distances) / (INCHING + ACC + DEC + CRUISE times) * 60",
+  "physical_postprocessing": "max(raw_prediction, 0)"
+}

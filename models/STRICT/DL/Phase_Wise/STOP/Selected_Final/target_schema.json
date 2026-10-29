@@ -1,0 +1,9 @@
+{
+  "phase": "STOP",
+  "target_features": [
+    "EV STOP Time (min)",
+    "EV STOP Distance (km)"
+  ],
+  "target_count": 2,
+  "final_assembly": "external common final_tat_assembly.py"
+}

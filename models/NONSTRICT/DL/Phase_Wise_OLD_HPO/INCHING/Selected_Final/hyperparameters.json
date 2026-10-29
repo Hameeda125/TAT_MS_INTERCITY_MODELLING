@@ -1,0 +1,12 @@
+{
+  "phase": "INCHING",
+  "architecture": "2",
+  "hidden_layers": [
+    2
+  ],
+  "dropout": 0.0,
+  "learning_rate": 0.0021682308261736652,
+  "weight_decay": 8.778168110055392e-06,
+  "selected_epochs": 506,
+  "selection_objective": "mean inner-CV MSE across the phase's two standardized EV targets"
+}

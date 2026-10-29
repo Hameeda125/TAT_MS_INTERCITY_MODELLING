@@ -1,0 +1,56 @@
+{
+  "script_version": "2026-10-01_PHASE_WISE_DL_V8_FIXED_LOPO_CONVERGENCE",
+  "dataset_scope": "NONSTRICT",
+  "input_files": [
+    "D:\\Hameeda_Projects\\TAT_MS_INTERCITY\\Data\\Results\\Master_Summary\\Training_Data\\EV_ICE_Training_NONSTRICT.xlsx"
+  ],
+  "input_sha256": {
+    "EV_ICE_Training_NONSTRICT.xlsx": "886fc2a933d2c66f0f5979d03a6244774ed48593d893515e22be011c0729e81e"
+  },
+  "rows": 33,
+  "unique_pairs": 33,
+  "strict_rows": 0,
+  "nonstrict_rows": 33,
+  "pair_class_handling": "READ / VALIDATE / PRESERVE ONLY",
+  "pair_class_recalculation": "NONE",
+  "pair_class_overwrite": "NONE",
+  "pair_class_used_as_predictor": false,
+  "model_source": "PHASE_DL",
+  "phases": [
+    "STOP",
+    "IDLE",
+    "INCHING",
+    "ACC",
+    "DEC",
+    "CRUISE"
+  ],
+  "selection_method": "FIXED_PREDECLARED_ANALYSIS_SPECIFICATION_NOT_HPO_OPTIMIZED",
+  "hyperparameter_interpretation": "FIXED/PREDECLARED FOR THIS CODE VERSION; NOT HPO-OPTIMIZED",
+  "hyperparameter_rationale": "Compact phase DNN specification fixed for this revised small-sample analysis; not selected by LOPO outcomes and not optimized by Optuna/HPO.",
+  "predeclared_meaning": "Predeclared here means fixed in this code/version before this evaluation run; it does not imply external preregistration.",
+  "hpo_used": false,
+  "architecture": "4-2",
+  "dropout": 0.1,
+  "learning_rate": 0.001,
+  "weight_decay": 0.001,
+  "fixed_epochs": 250,
+  "ensemble_seeds": [
+    42,
+    123,
+    2026,
+    31415,
+    27182
+  ],
+  "convergence_diagnostic": "Phase_Wise_DL_Training_Convergence.xlsx; TRAINING-LOSS OPTIMIZATION DIAGNOSTIC ONLY; NOT AN OUT-OF-SAMPLE GENERALIZATION CLAIM",
+  "physical_postprocessing": "max(raw_prediction, 0)",
+  "charging": "external common charging_time.py",
+  "final_assembly": "external common final_tat_assembly.py",
+  "selected_final_directories": {
+    "STOP": "D:\\Hameeda_Projects\\TAT_MS_INTERCITY_MODELLING\\models\\NONSTRICT\\DL\\Phase_Wise\\STOP\\Selected_Final",
+    "IDLE": "D:\\Hameeda_Projects\\TAT_MS_INTERCITY_MODELLING\\models\\NONSTRICT\\DL\\Phase_Wise\\IDLE\\Selected_Final",
+    "INCHING": "D:\\Hameeda_Projects\\TAT_MS_INTERCITY_MODELLING\\models\\NONSTRICT\\DL\\Phase_Wise\\INCHING\\Selected_Final",
+    "ACC": "D:\\Hameeda_Projects\\TAT_MS_INTERCITY_MODELLING\\models\\NONSTRICT\\DL\\Phase_Wise\\ACC\\Selected_Final",
+    "DEC": "D:\\Hameeda_Projects\\TAT_MS_INTERCITY_MODELLING\\models\\NONSTRICT\\DL\\Phase_Wise\\DEC\\Selected_Final",
+    "CRUISE": "D:\\Hameeda_Projects\\TAT_MS_INTERCITY_MODELLING\\models\\NONSTRICT\\DL\\Phase_Wise\\CRUISE\\Selected_Final"
+  }
+}

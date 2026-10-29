@@ -1,0 +1,13 @@
+{
+  "phase": "ACC",
+  "architecture": "8-4",
+  "hidden_layers": [
+    8,
+    4
+  ],
+  "dropout": 0.05,
+  "learning_rate": 0.0012791951394812828,
+  "weight_decay": 0.0021009999237023205,
+  "selected_epochs": 174,
+  "selection_objective": "mean inner-CV MSE across the phase's two standardized EV targets"
+}

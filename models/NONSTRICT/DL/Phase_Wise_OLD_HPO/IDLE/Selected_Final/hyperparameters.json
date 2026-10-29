@@ -1,0 +1,12 @@
+{
+  "phase": "IDLE",
+  "architecture": "4",
+  "hidden_layers": [
+    4
+  ],
+  "dropout": 0.0,
+  "learning_rate": 0.001906719021599518,
+  "weight_decay": 1.287683919315293e-06,
+  "selected_epochs": 138,
+  "selection_objective": "mean inner-CV MSE across the phase's two standardized EV targets"
+}

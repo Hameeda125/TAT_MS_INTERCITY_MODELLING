@@ -1,0 +1,23 @@
+{
+  "selection_method": "FIXED_PREDECLARED_ANALYSIS_SPECIFICATION_NOT_HPO_OPTIMIZED",
+  "hyperparameter_interpretation": "FIXED/PREDECLARED FOR THIS CODE VERSION; NOT HPO-OPTIMIZED",
+  "hyperparameter_rationale": "Compact small-sample DNN specification fixed for this revised analysis; not selected by LOPO outcomes and not optimized by Optuna/HPO.",
+  "predeclared_meaning": "Predeclared here means fixed in this code/version before this evaluation run; it does not imply external preregistration.",
+  "architecture": "16-8",
+  "hidden_layers": [
+    16,
+    8
+  ],
+  "dropout": 0.1,
+  "learning_rate": 0.001,
+  "weight_decay": 0.001,
+  "fixed_epochs": 250,
+  "ensemble_seeds": [
+    42,
+    123,
+    2026,
+    31415,
+    27182
+  ],
+  "hpo_used": false
+}

@@ -1,0 +1,37 @@
+{
+  "script_version": "2026-09-30_PHASE_WISE_DL_V6_NESTED_GROUPED_HPO",
+  "dataset_scope": "NONSTRICT",
+  "input_files": [
+    "D:\\Hameeda_Projects\\TAT_MS_INTERCITY\\Data\\Results\\Master_Summary\\Training_Data\\EV_ICE_Training_NONSTRICT.xlsx"
+  ],
+  "input_sha256": {
+    "EV_ICE_Training_NONSTRICT.xlsx": "021a3fb130b70bac273541f997696cd95dfde8bdaac694c617cc9dc3419cdf36"
+  },
+  "rows": 24,
+  "unique_pairs": 24,
+  "strict_rows": 0,
+  "nonstrict_rows": 24,
+  "pair_class_handling": "READ / VALIDATE / PRESERVE ONLY",
+  "pair_class_recalculation": "NONE",
+  "pair_class_overwrite": "NONE",
+  "pair_class_used_as_predictor": false,
+  "model_source": "PHASE_DL",
+  "phases": [
+    "STOP",
+    "IDLE",
+    "INCHING",
+    "ACC",
+    "DEC",
+    "CRUISE"
+  ],
+  "ensemble_seeds": [
+    42,
+    123,
+    2026,
+    31415,
+    27182
+  ],
+  "physical_postprocessing": "max(raw_prediction, 0)",
+  "charging": "separate common charging_time.py",
+  "final_tat": "downstream common final_tat_assembly.py"
+}

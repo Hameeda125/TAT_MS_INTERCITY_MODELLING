@@ -1,0 +1,9 @@
+{
+  "phase": "CRUISE",
+  "target_features": [
+    "EV CRUISE Time (min)",
+    "EV CRUISE Distance (km)"
+  ],
+  "target_count": 2,
+  "final_calculated_tat": "handled only by common downstream TAT assembler"
+}

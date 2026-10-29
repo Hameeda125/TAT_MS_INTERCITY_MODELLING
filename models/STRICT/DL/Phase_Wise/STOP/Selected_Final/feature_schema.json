@@ -1,0 +1,8 @@
+{
+  "phase": "STOP",
+  "input_features": [
+    "ICE STOP Time (min)",
+    "ICE STOP Distance (km)"
+  ],
+  "input_count": 2
+}

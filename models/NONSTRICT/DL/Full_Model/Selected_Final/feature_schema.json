@@ -1,0 +1,24 @@
+{
+  "input_features": [
+    "ICE Total Distance (km)",
+    "ICE Total TAT (min)",
+    "ICE Average Moving Speed (km/h)",
+    "ICE STOP Time (min)",
+    "ICE IDLE Time (min)",
+    "ICE INCHING Time (min)",
+    "ICE ACC Time (min)",
+    "ICE DEC Time (min)",
+    "ICE CRUISE Time (min)",
+    "ICE STOP Distance (km)",
+    "ICE IDLE Distance (km)",
+    "ICE INCHING Distance (km)",
+    "ICE ACC Distance (km)",
+    "ICE DEC Distance (km)",
+    "ICE CRUISE Distance (km)"
+  ],
+  "excluded_constant_ice_features": [
+    "ICE CHARGING_REFUELING Time (min)",
+    "ICE CHARGING_REFUELING Distance (km)"
+  ],
+  "input_count": 15
+}

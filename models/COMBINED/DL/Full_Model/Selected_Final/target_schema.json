@@ -1,0 +1,23 @@
+{
+  "target_features": [
+    "EV Total Distance (km)",
+    "EV Total TAT (min)",
+    "EV Average Moving Speed (km/h)",
+    "EV STOP Time (min)",
+    "EV IDLE Time (min)",
+    "EV INCHING Time (min)",
+    "EV ACC Time (min)",
+    "EV DEC Time (min)",
+    "EV CRUISE Time (min)",
+    "EV STOP Distance (km)",
+    "EV IDLE Distance (km)",
+    "EV INCHING Distance (km)",
+    "EV ACC Distance (km)",
+    "EV DEC Distance (km)",
+    "EV CRUISE Distance (km)"
+  ],
+  "target_count": 15,
+  "physical_postprocessing": "max(raw_prediction, 0)",
+  "charging": "external common charging_time.py",
+  "final_assembly": "external common final_tat_assembly.py"
+}

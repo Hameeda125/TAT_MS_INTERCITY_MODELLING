@@ -1,0 +1,8 @@
+{
+  "phase": "INCHING",
+  "input_features": [
+    "ICE INCHING Time (min)",
+    "ICE INCHING Distance (km)"
+  ],
+  "input_count": 2
+}

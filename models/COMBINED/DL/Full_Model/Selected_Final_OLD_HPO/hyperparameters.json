@@ -1,0 +1,12 @@
+{
+  "architecture": "32-16",
+  "hidden_layers": [
+    32,
+    16
+  ],
+  "dropout": 0.1,
+  "learning_rate": 0.0027286680911892524,
+  "weight_decay": 6.22217857992672e-06,
+  "selected_epochs": 141,
+  "objective": "mean inner-CV MSE across 15 standardized EV targets"
+}

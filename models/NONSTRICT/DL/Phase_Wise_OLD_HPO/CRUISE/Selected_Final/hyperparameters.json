@@ -1,0 +1,13 @@
+{
+  "phase": "CRUISE",
+  "architecture": "16-8",
+  "hidden_layers": [
+    16,
+    8
+  ],
+  "dropout": 0.1,
+  "learning_rate": 0.0028030784684433003,
+  "weight_decay": 0.00033264848068259887,
+  "selected_epochs": 121,
+  "selection_objective": "mean inner-CV MSE across the phase's two standardized EV targets"
+}

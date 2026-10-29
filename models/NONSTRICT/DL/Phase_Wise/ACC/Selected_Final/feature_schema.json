@@ -1,0 +1,8 @@
+{
+  "phase": "ACC",
+  "input_features": [
+    "ICE ACC Time (min)",
+    "ICE ACC Distance (km)"
+  ],
+  "input_count": 2
+}
